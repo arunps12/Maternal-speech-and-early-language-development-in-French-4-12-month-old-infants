@@ -78,8 +78,8 @@ def vowel_variability(df, group_col, feature_col):
                 continue
 
                 # Compute the area of the ellipse using the standard deviations of F1 and F2
-            sigmaF1 = feature_values[0].std()
-            sigmaF2 = feature_values[1].std()
+            sigmaF1 = std_features[feature_col[0]]
+            sigmaF2 = std_features[feature_col[1]]
             area = np.pi * sigmaF1 * sigmaF2  # Area of ellipse
 
             results.append({
@@ -105,8 +105,11 @@ def vowel_distinctiveness(df, group_col, cat_col, feature_col):
     
     results = []
 
-    # Group data by participant and register
-    for (spkid, age), group in df.groupby(group_col):
+    # Group data by participant and register (or any columns provided in group_col)
+    for key, group in df.groupby(group_col):
+        # Extract keys from the group for easier reference
+        spkid, age = key
+
         # Filter out vowel categories with fewer than 3 samples
         valid_groups = [vowel_group for vowel, vowel_group in group.groupby(cat_col) if len(vowel_group) >= 3]
         
@@ -115,27 +118,32 @@ def vowel_distinctiveness(df, group_col, cat_col, feature_col):
             print(f"Skipping participant {spkid}, age {age} due to no valid vowel groups.")
             continue
         
-        # Compute total variance (both between and within-cluster variance) for the remaining valid vowel groups
+        # Combine the valid vowel groups into a single DataFrame
         valid_data = pd.concat(valid_groups)
-        total_var = np.sum(np.var(valid_data[feature_col], axis=0, ddof=1))
-
-        # Compute within-cluster variance
-        within_cluster_var = 0
-        for vowel_group in valid_groups:
-            #print(vowel_group[cat_col])
-            # Compute variance within the vowel group
-            cluster_var = np.sum(np.var(vowel_group[feature_col], axis=0, ddof=1)) * len(vowel_group)
-            within_cluster_var += cluster_var
-
-        # Normalize within-cluster variance by the total number of samples
-        within_cluster_var /= len(valid_data)
-
         
-        # Between-cluster variance
-        between_cluster_var = total_var - within_cluster_var
+        # Calculate the overall centroid for the vowel space (F1 and F2)
+        overall_centroid = valid_data[feature_col].mean().values
+        
+        # Compute total sum of squares (TSS): squared distances of individual vowels from the overall centroid
+        total_ss = np.sum(np.sum((valid_data[feature_col] - overall_centroid) ** 2, axis=1))
+        
+        if total_ss == 0:
+            print(f"Skipping participant {spkid}, age {age} due to zero total variance.")
+            continue
+        
+        # Compute the centroid for each vowel category
+        vowel_centroids = valid_data.groupby(cat_col)[feature_col].mean()
 
-        # Compute vowel distinctiveness as the ratio of between-cluster variance to total variance
-        distinctiveness = max(0, between_cluster_var / total_var) if total_var > 0 else 0
+        # Compute between-vowel category sum of squares (BSS): squared distances of vowel category centroids from the overall centroid
+        between_ss = 0
+        for vowel, centroid in vowel_centroids.iterrows():
+            n_vowel = len(valid_data[valid_data[cat_col] == vowel])  # number of tokens in this vowel category
+            centroid_values = centroid.values  # F1 and F2 values for the centroid
+            # Calculate the squared distance between the vowel centroid and the overall centroid, then multiply by the number of tokens
+            between_ss += n_vowel * np.sum((centroid_values - overall_centroid) ** 2)
+
+        # Compute vowel distinctiveness as the ratio of between-category variance to total variance
+        distinctiveness = between_ss / total_ss
         
         # Append the results
         results.append({
@@ -147,8 +155,8 @@ def vowel_distinctiveness(df, group_col, cat_col, feature_col):
     # Convert results to DataFrame
     results_df = pd.DataFrame(results)
     results_df = results_df.dropna().reset_index(drop=True)
-    print("Distinctiveness have been saved")
+    
+    print("Distinctiveness has been saved")
     return results_df
-
 
 
