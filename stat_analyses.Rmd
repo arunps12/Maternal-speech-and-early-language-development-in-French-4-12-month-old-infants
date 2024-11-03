@@ -1,0 +1,1136 @@
+---
+title: "French_Stat_analyses"
+author: "Arun Prakash Singh"
+date: "2024-10-24"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+# 1. Load necessary libraries
+```{r}
+library(readxl)
+library(lme4)
+library(lmerTest)
+library(ggplot2)
+library(dplyr)
+library(crayon)
+library(merTools)
+library(boot)
+library(splines)
+library(stringr)
+library(cowplot)
+library(car)
+library(glmmTMB)
+library(DHARMa)
+```
+#2.Pitch
+#2.1 ADS
+```{r}
+df_ADS <- read_excel(file.path(getwd(), "acoustic_measures", "ADS_pitch_st.xlsx"))
+
+
+output.2.1 <- lmer.full.reduced.null.compare(meanF0st ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = meanF0st ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1|vowels), 
+                         nullm = TRUE, 
+                         nullmformula =meanF0st ~ SES + SEX + (1+AgeInDays|SPK_id) + (1|vowels),
+                         df_ADS)
+```
+
+```{r}
+pred.data.2.1 <- boot.ci.predict.lmer(
+  m = output.2.1$reduced_model,
+  optimizer = output.2.1$optimizer,
+  maxfun = output.2.1$maxfun,
+  data = output.2.1$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.2.1$fit_data$AgeInDays), max(output.2.1$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+
+#2.2 IDS
+```{r}
+df_IDS <- read_excel(file.path(getwd(), "acoustic_measures", "IDS_pitch_st.xlsx"))
+
+
+
+output.2.2 <- lmer.full.reduced.null.compare(meanF0st ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = meanF0st ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1|vowels), 
+                         nullm = TRUE, 
+                         nullmformula =meanF0st ~ SES + SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels),
+                         df_IDS)
+```
+
+```{r}
+pred.data.2.2 <- boot.ci.predict.lmer(
+  m = output.2.2$full_model,
+  optimizer = output.2.2$optimizer,
+  maxfun = output.2.2$maxfun,
+  data = output.2.2$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.2.2$fit_data$AgeInDays), max(output.2.2$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.2.1$fit_data$AgeInDays, "scaled:scale") + attr(output.2.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.2.2$fit_data$AgeInDays, "scaled:scale") + attr(output.2.2$fit_data$AgeInDays, "scaled:center")
+}
+inv_y_transform_fun_1 <- function(x) { exp(x) - 1 }
+inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+Pitch_semitones <- continuous_fit_ci_plot(
+  plot.data = list(output.2.1$fit_data, output.2.2$fit_data),
+  coefs = list(pred.data.2.1,pred.data.2.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "meanF0st",
+  x.labs = "Age in Days",
+  y.labs = "Pitch(semitones)",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(40,100),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_1, inv_x_transform_fun_2),
+  y.ax.transformation = TRUE,
+  inv_y_transform_fun = list(inv_y_transform_fun_1, inv_y_transform_fun_2),
+#x.breaks = seq(100, 400, by = 100),
+#y.breaks = seq(40, 60, by = 10),
+legend.labels = c("ADS", "IDS")
+)
+print(Pitch_semitones)
+
+```
+#3.Range
+#3.1 ADS
+```{r}
+df_ADS <- read_excel(file.path(getwd(), "acoustic_measures", "ADS_range_st.xlsx"))
+
+
+output.3.1 <- lmer.full.reduced.null.compare(RangeF0st ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = RangeF0st ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1|SPK_id) + (1|vowels), 
+                         nullm = TRUE, 
+                         nullmformula =RangeF0st ~ SES + SEX + (1|SPK_id) + (1|vowels),
+                         df_ADS)
+```
+```{r}
+df_ADS <- read_excel(file.path(getwd(), "acoustic_measures", "ADS_range_st.xlsx"))
+
+# Calculate the quartiles
+Q1 <- quantile(df_ADS$RangeF0st, 0.25)
+Q3 <- quantile(df_ADS$RangeF0st, 0.75)
+# Calculate the interquartile range (IQR)
+IQR <- Q3 - Q1
+# Define the lower and upper bounds for non-outliers
+lower <- Q1 - 1.5 * IQR
+upper <- Q3 + 1.5 * IQR
+
+# Remove outliers and create a new dataframe
+df_no_outliers_ADS <- df_ADS[df_ADS$RangeF0st >= lower & df_ADS$RangeF0st <= upper, ]
+
+output.3.1_no_outlier <- lmer.full.reduced.null.compare(RangeF0st ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = RangeF0st ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1|SPK_id) + (1|vowels), 
+                         nullm = TRUE, 
+                         nullmformula =RangeF0st ~ SES + SEX + (1+AgeInDays|SPK_id) + (1|SPK_id) + (1|vowels),
+                         df_no_outliers_ADS)
+```
+
+```{r}
+pred.data.3.1 <- boot.ci.predict.lmer(
+  m = output.3.1$reduced_model,
+  optimizer = output.3.1$optimizer,
+  maxfun = output.3.1$maxfun,
+  data = output.3.1$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.3.1$fit_data$AgeInDays), max(output.3.1$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+
+```{r}
+pred.data.3.1_no_outlier <- boot.ci.predict.lmer(
+  m = output.3.1_no_outlier$reduced_model,
+  optimizer = output.3.1_no_outlier$optimizer,
+  maxfun = output.3.1_no_outlier$maxfun,
+  data = output.3.1_no_outlier$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.3.1_no_outlier$fit_data$AgeInDays), max(output.3.1_no_outlier$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+#3.2 IDS
+```{r}
+df_IDS <- read_excel(file.path(getwd(), "acoustic_measures", "IDS_range_st.xlsx"))
+
+
+output.3.2 <- lmer.full.reduced.null.compare(RangeF0st ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = RangeF0st ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1|vowels), 
+                         nullm = TRUE, 
+                         nullmformula =RangeF0st ~ SES + SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels),
+                         df_IDS)
+```
+```{r}
+df_IDS <- read_excel(file.path(getwd(), "acoustic_measures", "IDS_range_st.xlsx"))
+
+# Calculate the quartiles
+Q1 <- quantile(df_IDS$RangeF0st, 0.25)
+Q3 <- quantile(df_IDS$RangeF0st, 0.75)
+# Calculate the interquartile range (IQR)
+IQR <- Q3 - Q1
+# Define the lower and upper bounds for non-outliers
+lower <- Q1 - 1.5 * IQR
+upper <- Q3 + 1.5 * IQR
+
+# Remove outliers and create a new dataframe
+df_no_outliers_IDS <- df_IDS[df_IDS$RangeF0st >= lower & df_IDS$RangeF0st <= upper, ]
+
+output.3.2_no_outlier <- lmer.full.reduced.null.compare(RangeF0st ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = RangeF0st ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1|SPK_id) + (1|vowels), 
+                         nullm = TRUE, 
+                         nullmformula =RangeF0st ~ SES + SEX + (1|SPK_id) + (1|vowels),
+                         df_no_outliers_IDS)
+```
+```{r}
+pred.data.3.2_no_outlier <- boot.ci.predict.lmer(
+  m = output.3.2_no_outlier$reduced_model,
+  optimizer = output.3.2_no_outlier$optimizer,
+  maxfun = output.3.2_no_outlier$maxfun,
+  data = output.3.2_no_outlier$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.3.2_no_outlier$fit_data$AgeInDays), max(output.3.2_no_outlier$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+
+```{r}
+pred.data.3.2 <- boot.ci.predict.lmer(
+  m = output.3.2$full_model,
+  optimizer = output.3.2$optimizer,
+  maxfun = output.3.2$maxfun,
+  data = output.3.2$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.3.2$fit_data$AgeInDays), max(output.3.2$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.3.1$fit_data$AgeInDays, "scaled:scale") + attr(output.3.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.3.2$fit_data$AgeInDays, "scaled:scale") + attr(output.3.2$fit_data$AgeInDays, "scaled:center")
+}
+inv_y_transform_fun_1 <- function(x) { exp(x) - 1 }
+inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+pitch_range_semitones <- continuous_fit_ci_plot(
+  plot.data = list(output.3.1$fit_data, output.3.2$fit_data),
+  coefs = list(pred.data.3.1,pred.data.3.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "RangeF0st",
+  x.labs = "Age in Days",
+  y.labs = "Pitch Range(semitones)",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(-1, ),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_1, inv_x_transform_fun_2),
+  y.ax.transformation = TRUE,
+  inv_y_transform_fun = list(inv_y_transform_fun_1, inv_y_transform_fun_2),
+  #y_grid_log = TRUE,
+#x.breaks = seq(100, 400, by = 100),
+  y.breaks = seq(0, 20, by = 10),
+legend.labels = c("ADS", "IDS")
+)
+
+print(pitch_range_semitones)
+
+```
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.3.1$fit_data$AgeInDays, "scaled:scale") + attr(output.3.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.3.2$fit_data$AgeInDays, "scaled:scale") + attr(output.3.2$fit_data$AgeInDays, "scaled:center")
+}
+inv_y_transform_fun_1 <- function(x) { exp(x)-1 + (x = ifelse(x <= 0, 0.1, x))}
+inv_y_transform_fun_2 <- function(x) { exp(x)-1 + (x = ifelse(x <= 0, 0.1, x))}
+
+pitch_range_semitones_log_grid <- continuous_fit_ci_plot(
+  plot.data = list(output.3.1$fit_data, output.3.2$fit_data),
+  coefs = list(pred.data.3.1,pred.data.3.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "RangeF0st",
+  x.labs = "Age in Days",
+  y.labs = "Pitch Range(semitones)",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(-1, ),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_1, inv_x_transform_fun_2),
+  y.ax.transformation = TRUE,
+  inv_y_transform_fun = list(inv_y_transform_fun_1, inv_y_transform_fun_2),
+  y_grid_log = TRUE,
+#x.breaks = seq(100, 400, by = 100),
+  #y.breaks = seq(0, 20, by = 10),
+legend.labels = c("ADS", "IDS")
+)
+
+print(pitch_range_semitones_log_grid)
+
+```
+
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.3.1_no_outlier$fit_data$AgeInDays, "scaled:scale") + attr(output.3.1_no_outlier$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.3.2_no_outlier$fit_data$AgeInDays, "scaled:scale") + attr(output.3.2_no_outlier$fit_data$AgeInDays, "scaled:center")
+}
+inv_y_transform_fun_1 <- function(x) { exp(x) - 1 }
+inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+pitch_range_semitones_no_outlier <- continuous_fit_ci_plot(
+  plot.data = list(output.3.1_no_outlier$fit_data, output.3.2_no_outlier$fit_data),
+  coefs = list(pred.data.3.1_no_outlier,pred.data.3.2_no_outlier),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "RangeF0st",
+  x.labs = "Age in Days",
+  y.labs = "Pitch Range(semitones)",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(40,100),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_1, inv_x_transform_fun_2),
+  y.ax.transformation = TRUE,
+  inv_y_transform_fun = list(inv_y_transform_fun_1, inv_y_transform_fun_2),
+#x.breaks = seq(100, 400, by = 100),
+#y.breaks = seq(40, 60, by = 10),
+legend.labels = c("ADS", "IDS")
+)
+
+print(pitch_range_semitones_no_outlier)
+
+```
+
+#4.Duration
+#4.1 ADS
+```{r}
+df_ADS <- read_excel(file.path(getwd(), "acoustic_measures", "ADS_dur_ms.xlsx"))
+
+
+
+output.4.1 <- lmer.full.reduced.null.compare(duration_ms ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = duration_ms ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1|SPK_id) + (1|vowels), 
+                         nullm = TRUE, 
+                         nullmformula =duration_ms ~ SES + SEX + (1|SPK_id) + (1|vowels),
+                         df_ADS)
+```
+```{r}
+df_ADS <- read_excel(file.path(getwd(), "acoustic_measures", "ADS_dur_ms.xlsx"))
+
+# Calculate the quartiles
+Q1 <- quantile(df_ADS$duration_ms, 0.25)
+Q3 <- quantile(df_ADS$duration_ms, 0.75)
+# Calculate the interquartile range (IQR)
+IQR <- Q3 - Q1
+# Define the lower and upper bounds for non-outliers
+lower <- Q1 - 1.5 * IQR
+upper <- Q3 + 1.5 * IQR
+
+# Remove outliers and create a new dataframe
+df_no_outliers_ADS <- df_ADS[df_ADS$duration_ms >= lower & df_ADS$duration_ms <= upper, ]
+
+output.4.1_no_outliers <- lmer.full.reduced.null.compare(duration_ms ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = duration_ms ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1|SPK_id) + (1|vowels), 
+                         nullm = TRUE, 
+                         nullmformula =duration_ms ~ SES + SEX + (1|SPK_id) + (1|vowels),
+                         df_no_outliers_ADS)
+```
+
+
+```{r}
+pred.data.4.1 <- boot.ci.predict.lmer(
+  m = output.4.1$reduced_model,
+  optimizer = output.4.1$optimizer,
+  maxfun = output.4.1$maxfun,
+  data = output.4.1$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.4.1$fit_data$AgeInDays), max(output.4.1$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+
+```{r}
+pred.data.4.1_no_outliers <- boot.ci.predict.lmer(
+  m = output.4.1_no_outliers$reduced_model,
+  optimizer = output.4.1_no_outliers$optimizer,
+  maxfun = output.4.1_no_outliers$maxfun,
+  data = output.4.1_no_outliers$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.4.1_no_outliers$fit_data$AgeInDays), max(output.4.1_no_outliers$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+
+#4.2 IDS
+```{r}
+df_IDS <- read_excel(file.path(getwd(), "acoustic_measures", "IDS_dur_ms.xlsx"))
+
+
+
+output.4.2 <- lmer.full.reduced.null.compare(duration_ms ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = duration_ms ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1|vowels), 
+                         nullm = TRUE, 
+                         nullmformula =duration_ms ~ SES + SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels),
+                         df_IDS)
+```
+
+```{r}
+df_IDS <- read_excel(file.path(getwd(), "acoustic_measures", "IDS_dur_ms.xlsx"))
+
+# Calculate the quartiles
+Q1 <- quantile(df_IDS$duration_ms, 0.25)
+Q3 <- quantile(df_IDS$duration_ms, 0.75)
+# Calculate the interquartile range (IQR)
+IQR <- Q3 - Q1
+# Define the lower and upper bounds for non-outliers
+lower <- Q1 - 1.5 * IQR
+upper <- Q3 + 1.5 * IQR
+
+# Remove outliers and create a new dataframe
+df_no_outliers_IDS <- df_IDS[df_IDS$duration_ms >= lower & df_IDS$duration_ms <= upper, ]
+
+output.4.2_no_outliers <- lmer.full.reduced.null.compare(duration_ms ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = duration_ms ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1|vowels), 
+                         nullm = TRUE, 
+                         nullmformula =duration_ms ~ SES + SEX + (1+AgeInDays|SPK_id) + (1|vowels),
+                         df_no_outliers_IDS)
+```
+
+
+```{r}
+pred.data.4.2 <- boot.ci.predict.lmer(
+  m = output.4.2$full_model,
+  optimizer = output.4.2$optimizer,
+  maxfun = output.4.2$maxfun,
+  data = output.4.2$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.4.2$fit_data$AgeInDays), max(output.4.2$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+
+```{r}
+pred.data.4.2_no_outliers <- boot.ci.predict.lmer(
+  m = output.4.2_no_outliers$reduced_model,
+  optimizer = output.4.2_no_outliers$optimizer,
+  maxfun = output.4.2_no_outliers$maxfun,
+  data = output.4.2$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.4.2_no_outliers$fit_data$AgeInDays), max(output.4.2_no_outliers$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+
+
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.4.1$fit_data$AgeInDays, "scaled:scale") + attr(output.4.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.4.2$fit_data$AgeInDays, "scaled:scale") + attr(output.4.2$fit_data$AgeInDays, "scaled:center")
+}
+inv_y_transform_fun_1 <- function(x) { exp(x) - 1 }
+inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+duration_ms <- continuous_fit_ci_plot(
+  plot.data = list(output.4.1$fit_data, output.4.2$fit_data),
+  coefs = list(pred.data.4.1,pred.data.4.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "duration_ms",
+  x.labs = "Age in Days",
+  y.labs = "duration(ms)",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(40,100),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_1, inv_x_transform_fun_2),
+  y.ax.transformation = TRUE,
+  inv_y_transform_fun = list(inv_y_transform_fun_1, inv_y_transform_fun_2),
+#x.breaks = seq(100, 400, by = 100),
+#y.breaks = seq(40, 60, by = 10),
+legend.labels = c("ADS", "IDS")
+)
+print(duration_ms)
+
+```
+
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.4.1$fit_data$AgeInDays, "scaled:scale") + attr(output.4.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.4.2$fit_data$AgeInDays, "scaled:scale") + attr(output.4.2$fit_data$AgeInDays, "scaled:center")
+}
+inv_y_transform_fun_1 <- function(x) { exp(x) - 1 }
+inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+duration_ms_log_grid <- continuous_fit_ci_plot(
+  plot.data = list(output.4.1$fit_data, output.4.2$fit_data),
+  coefs = list(pred.data.4.1,pred.data.4.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "duration_ms",
+  x.labs = "Age in Days",
+  y.labs = "duration(ms)",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(40,100),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_1, inv_x_transform_fun_2),
+  y.ax.transformation = TRUE,
+  inv_y_transform_fun = list(inv_y_transform_fun_1, inv_y_transform_fun_2),
+  y_grid_log = TRUE,
+#x.breaks = seq(100, 400, by = 100),
+#y.breaks = seq(40, 60, by = 10),
+legend.labels = c("ADS", "IDS")
+)
+print(duration_ms_log_grid)
+
+```
+#5. Vowel space Area
+#5.1 Corner vowels
+#5.1.1 ADS
+```{r}
+df_ADS <- read_excel(file.path(getwd(), "acoustic_measures", "ADS_area_cor.xlsx"))
+
+
+output.5.1.1 <- lmer.full.reduced.null.compare(ConvexHullArea ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = ConvexHullArea ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1|SPK_id), 
+                         nullm = TRUE, 
+                         nullmformula =ConvexHullArea ~ SES + SEX + (1|SPK_id),
+                         df_ADS)
+```
+
+```{r}
+pred.data.5.1.1 <- NULL
+for (i in seq(1, 1000, by = 100)) {
+  batch_result <- boot.ci.predict.lmer(
+    m = output.5.1.1$reduced_model,
+    optimizer = output.5.1.1$optimizer,
+    maxfun = output.5.1.1$maxfun,
+    data = output.5.1.1$fit_data,
+    pred.data = expand.grid(AgeInDays = seq(min(output.5.1.1$fit_data$AgeInDays), max(output.5.1.1$fit_data$AgeInDays), length.out = 100)),
+    reqcol = c("AgeInDays"),
+    centercol = c("SES", 'SEX'),
+    nboots = min(100, 1000- (i - 1)),
+    link = "identity",
+    keep.boots = FALSE
+  )
+  pred.data.5.1.1 <- rbind(pred.data.5.1.1, batch_result)
+}
+
+```
+#5.1.2 IDS
+```{r}
+df_IDS <- read_excel(file.path(getwd(), "acoustic_measures", "IDS_area_cor.xlsx"))
+
+
+
+output.5.1.2 <- lmer.full.reduced.null.compare(ConvexHullArea ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = ConvexHullArea ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1|SPK_id), 
+                         nullm = TRUE, 
+                         nullmformula =ConvexHullArea ~ SES + SEX + (1+AgeInDays|SPK_id),
+                         df_IDS)
+```
+
+```{r}
+pred.data.5.1.2 <- boot.ci.predict.lmer(
+  m = output.5.1.2$reduced_model,
+  optimizer = output.5.1.2$optimizer,
+  maxfun = output.5.1.2$maxfun,
+  data = output.5.1.2$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.5.1.2$fit_data$AgeInDays), max(output.5.1.2$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.5.1.1$fit_data$AgeInDays, "scaled:scale") + attr(output.5.1.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.5.1.2$fit_data$AgeInDays, "scaled:scale") + attr(output.5.1.2$fit_data$AgeInDays, "scaled:center")
+}
+inv_y_transform_fun_1 <- function(x) { exp(x) - 1 }
+inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+Area_cor <- continuous_fit_ci_plot(
+  plot.data = list(output.5.1.1$fit_data, output.5.1.2$fit_data),
+  coefs = list(pred.data.5.1.1, pred.data.5.1.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "ConvexHullArea",
+  x.labs = "Age in Days",
+  y.labs = "Vowel Space Area (kHz^2)",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(40,100),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  div = 1000,
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_1, inv_x_transform_fun_2),
+  y.ax.transformation = FALSE,
+  inv_y_transform_fun = list(inv_y_transform_fun_1, inv_y_transform_fun_2),
+#x.breaks = seq(100, 400, by = 100),
+#y.breaks = seq(40, 60, by = 10),
+#colors = c("#6A00A8"),
+#alpha_level = 0.3,
+legend.labels = c("ADS","IDS")
+)
+print(Area_cor)
+
+```
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.5.1.1$fit_data$AgeInDays, "scaled:scale") + attr(output.5.1.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.5.1.2$fit_data$AgeInDays, "scaled:scale") + attr(output.5.1.2$fit_data$AgeInDays, "scaled:center")
+}
+inv_y_transform_fun_1 <- function(x) { exp(x) - 1 }
+inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+Area_cor_IDS <- continuous_fit_ci_plot(
+  plot.data = list(output.5.1.2$fit_data),
+  coefs = list(pred.data.5.1.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "ConvexHullArea",
+  x.labs = "Age in Days",
+  y.labs = "Vowel Space Area (kHz^2)",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(40,100),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  div = 1000,
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_2),
+  y.ax.transformation = FALSE,
+  inv_y_transform_fun = list(inv_y_transform_fun_2),
+#x.breaks = seq(100, 400, by = 100),
+#y.breaks = seq(40, 60, by = 10),
+colors = c("#6A00A8"),
+alpha_level = 0.3,
+legend.labels = c("IDS")
+)
+print(Area_cor_IDS)
+
+```
+#5.2 Border vowels
+#5.2.1 ADS
+```{r}
+df_ADS <- read_excel(file.path(getwd(), "acoustic_measures", "ADS_area_full.xlsx"))
+
+output.5.2.1 <- lmer.full.reduced.null.compare(ConvexHullArea ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = ConvexHullArea ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1|SPK_id), 
+                         nullm = TRUE, 
+                         nullmformula =ConvexHullArea ~ SES + SEX + (1|SPK_id),
+                         df_ADS)
+```
+```{r}
+pred.data.5.2.1 <- boot.ci.predict.lmer(
+  m = output.5.2.1$reduced_model,
+  optimizer = output.5.2.1$optimizer,
+  maxfun = output.5.2.1$maxfun,
+  data = output.5.2.1$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.5.2.1$fit_data$AgeInDays), max(output.5.2.1$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+#5.2.2 IDS
+```{r}
+df_IDS <- read_excel(file.path(getwd(), "acoustic_measures", "IDS_area_full.xlsx"))
+
+output.5.2.2 <- lmer.full.reduced.null.compare(ConvexHullArea ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = ConvexHullArea ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1|SPK_id), 
+                         nullm = TRUE, 
+                         nullmformula =ConvexHullArea ~ SES + SEX + (1+AgeInDays|SPK_id),
+                         df_IDS)
+```
+```{r}
+pred.data.5.2.2 <- boot.ci.predict.lmer(
+  m = output.5.2.2$full_model,
+  optimizer = output.5.2.2$optimizer,
+  maxfun = output.5.2.2$maxfun,
+  data = output.5.2.2$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.5.2.2$fit_data$AgeInDays), max(output.5.2.2$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.5.2.1$fit_data$AgeInDays, "scaled:scale") + attr(output.5.2.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.5.2.2$fit_data$AgeInDays, "scaled:scale") + attr(output.5.2.2$fit_data$AgeInDays, "scaled:center")
+}
+inv_y_transform_fun_1 <- function(x) { x }
+inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+Area_full <- continuous_fit_ci_plot(
+  plot.data = list(output.5.2.1$fit_data, output.5.2.2$fit_data),
+  coefs = list(pred.data.5.2.1,pred.data.5.2.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "ConvexHullArea",
+  x.labs = "Age in Days",
+  y.labs = "Vowel Space Area (kHz^2)",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(40,100),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  div = 1000,
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_1, inv_x_transform_fun_2),
+  y.ax.transformation = TRUE,
+  inv_y_transform_fun = list(inv_y_transform_fun_1, inv_y_transform_fun_2),
+#x.breaks = seq(100, 400, by = 100),
+#y.breaks = seq(40, 60, by = 10),
+#colors = c("#6A00A8"),
+#alpha_level = 0.3,
+#legend.labels = c("IDS")
+legend.labels = c( "ADS","IDS")
+)
+
+print(Area_full)
+```
+
+#6. Varability
+#6.1 ADS
+```{r}
+df_ADS <- read_excel(file.path(getwd(), "acoustic_measures", "ADS_var.xlsx"))
+
+output.6.1 <- lmer.full.reduced.null.compare(variability ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = variability ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1|SPK_id) + (1|vowels), 
+                         nullm = TRUE, 
+                         nullmformula =variability ~ SES + SEX + (1|SPK_id) + (1|vowels),
+                         df_ADS)
+```
+
+```{r}
+pred.data.6.1 <- boot.ci.predict.lmer(
+  m = output.6.1$reduced_model,
+  optimizer = output.6.1$optimizer,
+  maxfun = output.6.1$maxfun,
+  data = output.6.1$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.6.1$fit_data$AgeInDays), max(output.6.1$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+#6.2 IDS
+```{r}
+df_IDS <- read_excel(file.path(getwd(), "acoustic_measures", "IDS_var.xlsx"))
+
+output.6.2 <- lmer.full.reduced.null.compare(variability ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels), 
+                        optimizer = "bobyqa", 
+                         maxfun = 1000000000,
+                        fullm = TRUE,
+                         redm = TRUE, 
+                         redmformula = variability ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id) + (1|vowels), 
+                         nullm = TRUE, 
+                         nullmformula =variability ~ SES + SEX + (1+AgeInDays|SPK_id) + (1+AgeInDays|vowels),
+                         df_IDS)
+```
+
+```{r}
+pred.data.6.2 <- boot.ci.predict.lmer(
+  m = output.6.2$reduced_model,
+  optimizer = output.6.2$optimizer,
+  maxfun = output.6.2$maxfun,
+  data = output.6.2$fit_data,
+  pred.data = expand.grid(AgeInDays = seq(min(output.6.2$fit_data$AgeInDays), max(output.6.2$fit_data$AgeInDays), length.out = 100)),
+  reqcol  = c("AgeInDays"),
+  centercol = c("SES", 'SEX'),
+  nboots = 1000,
+  link = "identity",
+ keep.boots = FALSE
+)
+```
+
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.6.1$fit_data$AgeInDays, "scaled:scale") + attr(output.6.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.6.2$fit_data$AgeInDays, "scaled:scale") + attr(output.6.2$fit_data$AgeInDays, "scaled:center")
+}
+inv_y_transform_fun_1 <- function(x) { exp(x) - 1 }
+inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+var_vow <- continuous_fit_ci_plot(
+  plot.data = list(output.6.1$fit_data, output.6.2$fit_data),
+  coefs = list(pred.data.6.1,pred.data.6.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "variability",
+  x.labs = "Age in Days",
+  y.labs = "Variability(kHz^2)",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(40,100),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  div = 1000,
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_1, inv_x_transform_fun_2),
+  y.ax.transformation = TRUE,
+  inv_y_transform_fun = list(inv_y_transform_fun_1, inv_y_transform_fun_2),
+#x.breaks = seq(100, 400, by = 100),
+#y.breaks = seq(40, 60, by = 10),
+#colors = c("#6A00A8"),
+#alpha_level = 0.3,
+legend.labels = c( "ADS","IDS")
+)
+print(var_vow)
+
+```
+
+
+#7. Distinctiveness
+#7.1 ADS
+```{r}
+df_ADS <- read_excel(file.path(getwd(), "acoustic_measures", "ADS_dist.xlsx"))
+
+output.7.1 <- glmmTB.full.reduced.null.compare(Vowel_Dist ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id), 
+                        family = beta_family(link = "logit"), 
+                         zi_formula = ~1,
+                        fullm = FALSE,
+                         redm = TRUE, 
+                         redmformula = Vowel_Dist ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1|SPK_id), 
+                         nullm = TRUE, 
+                         nullmformula =Vowel_Dist ~ SES + SEX + (1|SPK_id),
+                         df_ADS)
+```
+
+```{r}
+pred.data.7.1 <- NULL
+for (i in seq(1, 1000, by = 100)) {
+  batch_result <- boot.ci.predict.glmmTMB(
+    m = output.7.1$reduced_model,
+    data = output.7.1$fit_data,
+    pred.data = expand.grid(AgeInDays = seq(min(output.7.1$fit_data$AgeInDays), max(output.7.1$fit_data$AgeInDays), length.out = 100)),
+    reqcol = c("AgeInDays"),
+    centercol = c("SES", 'SEX'),
+    nboots = min(100, 1000- (i - 1)),
+    keep.boots = FALSE
+  )
+  pred.data.7.1 <- rbind(pred.data.7.1, batch_result)
+}
+
+```
+
+#7.2 IDS
+```{r}
+df_IDS <- read_excel(file.path(getwd(), "acoustic_measures", "IDS_dist.xlsx"))
+
+output.7.2 <- glmmTB.full.reduced.null.compare(Vowel_Dist ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1+AgeInDays|SPK_id), 
+                        family = beta_family(link = "logit"), 
+                         zi_formula = ~1,
+                        fullm = TRUE,
+                         redm = FALSE, 
+                         redmformula = Vowel_Dist ~ SES + SEX + AgeInDays + AgeInDays:SEX + (1|SPK_id), 
+                         nullm = TRUE, 
+                         nullmformula =Vowel_Dist ~ SES + SEX + (1+AgeInDays|SPK_id),
+                         df_IDS)
+```
+
+
+```{r}
+pred.data.7.2 <- NULL
+for (i in seq(1, 1000, by = 50)) {
+  batch_result <- boot.ci.predict.glmmTMB(
+    m = output.7.2$full_model,
+    data = output.7.2$fit_data,
+    pred.data = expand.grid(AgeInDays = seq(min(output.7.2$fit_data$AgeInDays), max(output.7.2$fit_data$AgeInDays), length.out = 100)),
+    reqcol = c("AgeInDays"),
+    centercol = c("SES", 'SEX'),
+    nboots = min(50, 1000- (i - 1)),
+    keep.boots = FALSE
+  )
+  pred.data.7.2 <- rbind(pred.data.7.2, batch_result)
+}
+
+```
+
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.7.1$fit_data$AgeInDays, "scaled:scale") + attr(output.7.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.7.2$fit_data$AgeInDays, "scaled:scale") + attr(output.7.2$fit_data$AgeInDays, "scaled:center")
+}
+#inv_y_transform_fun_1 <- function(x) { exp(x) - 1 }
+#inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+distinctiveness <- continuous_fit_ci_plot(
+  plot.data = list(output.7.1$fit_data, output.7.2$fit_data),
+  coefs = list(pred.data.7.1, pred.data.7.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "Vowel_Dist",
+  x.labs = "Age in Days",
+  y.labs = "Distinctiveness",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(40,100),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_1, inv_x_transform_fun_2),
+  y.ax.transformation = FALSE,
+  inv_y_transform_fun = NULL,
+#x.breaks = seq(100, 400, by = 100),
+#y.breaks = seq(40, 60, by = 10),
+#colors = c("#6A00A8"),
+#alpha_level = 0.3,
+legend.labels = c("ADS","IDS")
+)
+print(distinctiveness)
+
+```
+
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.7.1$fit_data$AgeInDays, "scaled:scale") + attr(output.7.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.7.2$fit_data$AgeInDays, "scaled:scale") + attr(output.7.2$fit_data$AgeInDays, "scaled:center")
+}
+#inv_y_transform_fun_1 <- function(x) { exp(x) - 1 }
+#inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+distinctiveness_IDS <- continuous_fit_ci_plot(
+  plot.data = list(output.7.2$fit_data),
+  coefs = list(pred.data.7.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "Vowel_Dist",
+  x.labs = "Age in Days",
+  y.labs = "Distinctiveness",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(40,100),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_2),
+  y.ax.transformation = FALSE,
+  inv_y_transform_fun = NULL,
+#x.breaks = seq(100, 400, by = 100),
+#y.breaks = seq(40, 60, by = 10),
+colors = c("#6A00A8"),
+alpha_level = 0.3,
+legend.labels = c("IDS")
+)
+print(distinctiveness_IDS)
+
+```
+
+```{r}
+pred.data.7.2 <- boot.ci.predict.glmmTMB(
+    m = output.7.2$full_model,
+    data = output.7.2$fit_data,
+    pred.data = expand.grid(AgeInDays = seq(min(output.7.2$fit_data$AgeInDays), max(output.7.2$fit_data$AgeInDays), length.out = 100)),
+    reqcol = c("AgeInDays"),
+    centercol = c("SES", 'SEX'),
+    nboots = 1000,
+    keep.boots = FALSE
+)
+```
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.7.1$fit_data$AgeInDays, "scaled:scale") + attr(output.7.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.7.2$fit_data$AgeInDays, "scaled:scale") + attr(output.7.2$fit_data$AgeInDays, "scaled:center")
+}
+#inv_y_transform_fun_1 <- function(x) { exp(x) - 1 }
+#inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+distinctiveness <- continuous_fit_ci_plot(
+  plot.data = list(output.7.1$fit_data, output.7.2$fit_data),
+  coefs = list(pred.data.7.1, pred.data.7.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "Vowel_Dist",
+  x.labs = "Age in Days",
+  y.labs = "Distinctiveness",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(40,100),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_1, inv_x_transform_fun_2),
+  y.ax.transformation = FALSE,
+  inv_y_transform_fun = NULL,
+#x.breaks = seq(100, 400, by = 100),
+#y.breaks = seq(40, 60, by = 10),
+#colors = c("#6A00A8"),
+#alpha_level = 0.3,
+legend.labels = c("ADS","IDS")
+)
+print(distinctiveness)
+
+```
+
+```{r}
+inv_x_transform_fun_1 <- function(x) {
+  x * attr(output.7.1$fit_data$AgeInDays, "scaled:scale") + attr(output.7.1$fit_data$AgeInDays, "scaled:center")
+}
+inv_x_transform_fun_2 <- function(x) {
+  x * attr(output.7.2$fit_data$AgeInDays, "scaled:scale") + attr(output.7.2$fit_data$AgeInDays, "scaled:center")
+}
+#inv_y_transform_fun_1 <- function(x) { exp(x) - 1 }
+#inv_y_transform_fun_2 <- function(x) { exp(x) - 1 }
+
+distinctiveness_IDS <- continuous_fit_ci_plot(
+  plot.data = list(output.7.2$fit_data),
+  coefs = list(pred.data.7.2),
+  plot.data.col.x = "AgeInDays",
+  plot.data.col.y = "Vowel_Dist",
+  x.labs = "Age in Days",
+  y.labs = "Distinctiveness",
+  #x.lim = c(120,500),#c(min(pred.data.2.1$AgeInDays), max(pred.data.2.1$AgeInDays)),
+  #y.lim = c(40,100),#c(min(output.2.1$fit_data$meanF0st), max(output.2.1$fit_data$meanF0st)),
+  x.ax.transformation = TRUE,
+  inv_x_transform_fun = list(inv_x_transform_fun_2),
+  y.ax.transformation = FALSE,
+  inv_y_transform_fun = NULL,
+#x.breaks = seq(100, 400, by = 100),
+#y.breaks = seq(40, 60, by = 10),
+colors = c("#6A00A8"),
+alpha_level = 0.3,
+legend.labels = c("IDS")
+)
+print(distinctiveness_IDS)
+
+```
+duration_ms_log_grid
+```{r}
+ggsave(file.path(getwd(), "StatPlots", "pitch.pdf"), plot = Pitch_semitones, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "pitch_range_outlier.pdf"), plot = pitch_range_semitones, height = 5) 
+ggsave(file.path(getwd(), "StatPlots", "pitch_range_outlier_log_grid.pdf"), plot = pitch_range_semitones_log_grid, height = 5) 
+ggsave(file.path(getwd(), "StatPlots", "pitch_range_no_outlier.pdf"), plot = pitch_range_semitones_no_outlier, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "duration.pdf"), plot = duration_ms, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "duration_log_grid.pdf"), plot = duration_ms_log_grid, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "Area_corner_vowels.pdf"), plot = Area_cor, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "Are_full.pdf"), plot = Area_full, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "Variability.pdf"), plot = var_vow, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "Distinctiveness.pdf"), plot = distinctiveness, height = 5)
+
+
+ggsave(file.path(getwd(), "StatPlots", "pitch.jpg"), plot = Pitch_semitones, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "pitch_range_outlier.jpg"), plot = pitch_range_semitones, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "pitch_range_outlier_log_grid.jpg"), plot = pitch_range_semitones_log_grid, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "pitch_range_no_outlier.jpg"), plot = pitch_range_semitones_no_outlier, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "duration.jpg"), plot = duration_ms, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "duration_log_grid.jpg"), plot = duration_ms_log_grid, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "Area_corner_vowels.jpg"), plot = Area_cor, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "Are_full.jpg"), plot = Area_full, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "Variability.jpg"), plot = var_vow, height = 5)
+ggsave(file.path(getwd(), "StatPlots", "Distinctiveness.jpg"), plot = distinctiveness, height = 5)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
