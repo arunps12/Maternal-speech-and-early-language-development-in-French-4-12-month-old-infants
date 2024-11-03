@@ -120,7 +120,9 @@ def vowel_distinctiveness(df, group_col, cat_col, feature_col):
         
         # Combine the valid vowel groups into a single DataFrame
         valid_data = pd.concat(valid_groups)
-        
+        valid_data[feature_col[0]] = (valid_data[feature_col[0]] - valid_data[feature_col[0]].mean()) / valid_data[feature_col[0]].std()
+    
+        valid_data[feature_col[1]] = (valid_data[feature_col[1]] - valid_data[feature_col[1]].mean()) / valid_data[feature_col[1]].std()
         # Calculate the overall centroid for the vowel space (F1 and F2)
         overall_centroid = valid_data[feature_col].mean().values
         
