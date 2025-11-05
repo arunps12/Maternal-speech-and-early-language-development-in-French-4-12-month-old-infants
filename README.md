@@ -107,6 +107,7 @@ These results suggest that while mothers modulate prosodic range as infants grow
 ## 📜 Citation
 If you use or build upon this work, please cite:
 
+```bibtex
 @misc{Maternal_French_Infant_Speech,
   author       = {Arun Prakash Singh},
   title        = {Maternal Speech and Early Language Development in French 4--12-Month-Old Infants},
