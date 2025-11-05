@@ -103,7 +103,18 @@ install.packages(c("lme4", "lmerTest", "car", "boot", "merTools", "DHARMa", "glm
 
 These results suggest that while mothers modulate prosodic range as infants grow, vowel category structure remains relatively stable during the first year.
 
+---
+## 📜 Citation
+If you use or build upon this work, please cite:
 
+@misc{Maternal_French_Infant_Speech,
+  author       = {Arun Prakash Singh},
+  title        = {Maternal Speech and Early Language Development in French 4--12-Month-Old Infants},
+  year         = {2025},
+  howpublished = {\url{https://github.com/arunps12/Maternal-speech-and-early-language-development-in-French-4-12-month-old-infants}},
+  note         = {GPL-3.0 License}
+}
+---
 
 ## 📬 Contact
 
