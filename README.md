@@ -1,148 +1,117 @@
-# Maternal Speech and Early Language Development in French 4‑12 Month‑Old Infants
+# Maternal Speech and Early Language Development in French 4–12-Month-Old Infants
 
-This repository accompanies our research on how **maternal speech input** supports **early language development** in French‑learning infants (aged 4‑12 months).  
-We provide data‑preparation scripts, analysis pipelines, metadata and derived datasets, plus reproducible code for exploration and modelling of child vocalizations and language outcomes.
-
----
-
-## 🎯 Project Overview
-
-### Research Aim  
-To investigate how variations in the quantity and quality of maternal speech directed at infants aged 4‑12 months influence subsequent early language outcomes in French‑learning infants.
-
-### Key Questions  
-- How much maternal speech (in words, utterances, types) do infants hear in naturalistic settings?  
-- Which acoustic‑prosodic features of maternal speech correlate with infant vocalizations or early lexical growth?  
-- Can early infant vocal behaviours (babbling, canonical vocalizations) be predicted from maternal input metrics?
+This repository contains the analysis pipeline, scripts, and results for the study **“Maternal speech and early language development in French 4–12-month-old infants.”**  
+The project investigates how the acoustic characteristics of maternal *infant-directed speech* (IDS) change as infants grow from 4 to 12 months of age, focusing on vowel acoustics, variability, and distinctiveness.
 
 ---
 
-## 📂 Repository Structure
+## 🧠 Overview
+
+Mothers adjust their speech acoustically when interacting with infants, which is thought to support phonetic learning.  
+This project examines whether specific **acoustic measures**—such as pitch, pitch range, vowel duration, vowel space area, vowel variability, and vowel distinctiveness—systematically vary with **child age** in French IDS.
+
+Analyses are based on **107 audio recordings** of French-speaking mothers addressing their infants at 4, 8, and 12 months.  
+A total of **10 671 vowels** were annotated and analyzed.
+
+---
+
+## 🔧 Data Processing Pipeline
+
+1. **Annotation**
+   - TextGrid files were generated for each recording using *Praat*.
+   - Vowel tiers were aligned manually and exported using the Python library `textgrid`.
+
+2. **Feature Extraction**
+   - Implemented with [`parselmouth`](https://github.com/YannickJadoul/Parselmouth).
+   - Extracted features for each vowel:
+     - Mean, minimum, and maximum **pitch (Hz)**
+     - **Formants (F1, F2)** using Burg method with optimized formant ceilings
+     - **Vowel duration (s)**  
+   - All features were stored in structured DataFrames.
+
+3. **Acoustic Measure Computation**  
+   Implemented in [`acoustic_measures.py`](acoustic_measures.py):
+
+   | Measure | Description | Unit | Function |
+   |----------|--------------|------|-----------|
+   | **Pitch** | Mean fundamental frequency converted to semitones above 10 Hz | semitones | `pitch_in_st()` |
+   | **Pitch Range** | Max–min pitch difference | semitones | `range_in_st()` |
+   | **Duration** | Vowel length | ms | `duration_in_ms()` |
+   | **Vowel Space Area** | Area of polygon formed by mean F1–F2 values | Hz² | `vowel_space_expansion()` |
+   | **Vowel Variability** | Elliptical area based on σF1×σF2 | Hz² | `vowel_variability()` |
+   | **Vowel Distinctiveness** | Ratio of between-vowel to total variance in F1/F2 | unitless | `vowel_distinctiveness()` |
+
+4. **Directory and Path Management**  
+   Defined in [`path.py`](path.py) using utility functions from [`utils.py`](utils.py):
+   - `create_dir()` ensures that output directories (`acoustic_measures/`, `StatPlots/`, etc.) exist.
+   - `Hz_to_semitones()` converts raw pitch values for perceptual scaling.
+
+---
+
+## 📊 Statistical Analysis
+
+Statistical modeling was carried out in **R (4.2.3)** using the packages `lme4`, `lmerTest`, `car`, and `boot`.
+
+- **Linear Mixed-Effects Models (LMMs)** tested how each acoustic measure varied with infant age.
+- **Fixed effects:** `AgeInDays (z-scaled)`, `SES`, `Gender`, and their interactions.
+- **Random effects:** participant intercepts and random slopes (simplified when singular fits occurred).
+- **Model comparison:** Likelihood-ratio test between full and null models.
+- **Confidence intervals:** obtained via bootstrapping (1 000 iterations).
+- **Collinearity diagnostics:** Variance Inflation Factors (VIF < 2).
+- **Model validation:** residual inspection and DHARMa diagnostics.
+
+Implementation and outputs are documented in [`stat_analyses.Rmd`](stat_analyses.Rmd) and rendered in [`stat_analyses.pdf`](stat_analyses.pdf).
+
+---
+
+## 📁 Repository Structure
 
 ```
-Maternal‑speech‑and‑early‑language‑development‑in‑French‑4‑12‑month‑old‑infants/
+Maternal-speech-and-early-language-development-in-French-4-12-month-old-infants/
 │
-├── data/                          ← Raw and processed data folders (not all public)
-│   ├── raw_audio/                 ← Long‑form recordings of infant‑caregiver interaction
-│   ├── transcripts/               ← Annotation files, utterance boundaries
-│   ├── metadata.csv               ← Study metadata: participant IDs, age, hearing status, etc.
-│   ├── derived_features/          ← Derived acoustic & prosodic features
-│   └── infant_outcomes.csv        ← Infant language outcome variables (e.g., vocabulary size)
-│
-├── scripts/                       ← Preprocessing and feature‑extraction scripts
-│   ├── 01_extract_maternal_input.py       ← Extract maternal speech metrics from transcripts/audio
-│   ├── 02_extract_infant_vocalisations.py ← Detect infant vocalisations from recordings
-│   ├── 03_compute_acoustic_features.py    ← Compute prosodic/acoustic features of maternal & infant speech
-│
-├── notebooks/                     ← Jupyter notebooks for exploratory analysis and modelling
-│   ├── EDA_maternal_input.ipynb
-│   ├── EDA_infant_vocalisations.ipynb
-│   └── Modelling_language_outcome.ipynb
-│
-├── results/                       ← Output from analyses (figures, tables)
-│
-├── README.md                      ← This file
-├── requirements.txt               ← Python dependencies for reproducibility
-└── LICENSE                        ← Open‑source licence
+├── Notebook/                         # R notebook and exploratory analyses
+├── acoustic_measures.py              # Functions for vowel-based acoustic metrics
+├── utils.py                          # Utility functions (directory creation, Hz→st conversion)
+├── path.py                           # Path setup for saving analysis outputs
+├── Require_functions_stat_analyses.R # Helper R functions for LMM fitting
+├── stat_analyses.Rmd / .pdf          # Main R-based statistical analysis
+├── LICENSE                           # GNU General Public License v3
+└── README.md                         # (this file)
 ```
 
 ---
 
-## 🛠️ Setup & Dependencies
+## 🧩 Dependencies
 
-### Recommended: Virtual environment  
-Create an isolated environment before installing dependencies:
-
+### Python
 ```bash
-# Using venv
-python3 -m venv venv
-source venv/bin/activate        # On Windows: venv\Scripts\activate
-
-# Then install dependencies
-pip install -r requirements.txt
+pip install numpy pandas scipy parselmouth textgrid soundfile matplotlib
 ```
 
-### Sample `requirements.txt`  
-```txt
-numpy
-pandas
-scipy
-librosa
-torchaudio
-matplotlib
-seaborn
-scikit‑learn
-jupyter
+### R
+```r
+install.packages(c("lme4", "lmerTest", "car", "boot", "merTools", "DHARMa", "glmmTMB"))
 ```
 
 ---
 
-## 🔍 Data Preparation Workflow
+## 📈 Results Summary
 
-### 1. Extract maternal speech metrics  
-```bash
-python scripts/01_extract_maternal_input.py \
-  --audio_dir data/raw_audio/ \
-  --transcripts_dir data/transcripts/ \
-  --output_csv data/derived_features/maternal_input_metrics.csv
-```
+- **Pitch and Vowel Space Area:** no significant change with age.  
+- **Pitch Range and Duration:** significantly increased with age.  
+- **Vowel Variability & Distinctiveness:** showed no systematic trend across months.  
 
-### 2. Extract infant vocalisations  
-```bash
-python scripts/02_extract_infant_vocalisations.py \
-  --audio_dir data/raw_audio/ \
-  --output_csv data/derived_features/infant_vocalisations.csv
-```
+These results suggest that while mothers modulate prosodic range as infants grow, vowel category structure remains relatively stable during the first year.
 
-### 3. Compute acoustic/prosodic features  
-```bash
-python scripts/03_compute_acoustic_features.py \
-  --input_metrics data/derived_features/maternal_input_metrics.csv \
-  --output_features data/derived_features/acoustic_features.csv
-```
 
-### 4. Merge with infant outcomes  
-Use `metadata.csv` and `infant_outcomes.csv` to merge predictors and outcomes for modelling.
+
+## 📬 Contact
+
+**Arun Prakash Singh**  
+Department of Linguistics and Scandinavian Studies, University of Oslo  
+📧 arunps@uio.no  
+🔗 [https://github.com/arunps12](https://github.com/arunps12)
 
 ---
 
-## 📊 Analysis & Modelling
-
-Explore data and fit statistical or machine‑learning models using notebooks in `notebooks/`.  
-Typical analyses include:
-
-- Relationship between maternal speech quantity (utterances/hour) and infant canonical babbling rate.  
-- Prosodic features (pitch, rhythm) of maternal speech predicting infant vocal output.  
-- Regression or classification models: early infant vocalisations → 12‑month vocabulary size.
-
----
-
-## 🧮 Reproducibility & Results  
-The `results/` folder contains:
-
-- Figures (PNG/PDF) of key findings  
-- Tables summarising model coefficients  
-- Model performance metrics (R², accuracy, etc.)
-
-Feel free to regenerate these by running the notebooks after completing data preparation.
-
----
-
-## 🧾 Citation  
-If you use this dataset or pipeline in your research, please cite:
-
-```
-Author(s). (2025). Maternal Speech and Early Language Development in French 4‑12 Month‑Old Infants [Data set and code]. GitHub repository. https://github.com/arunps12/Maternal‑speech‑and‑early‑language‑development‑in‑French‑4‑12‑month‑old‑infants
-```
-
----
-
-## 📬 Contact  
-**Arun Singh**  
-Affiliation: University of Oslo, Norway  
-Email: arunps@uio.no  
-GitHub: https://github.com/arunps12  
-Project repo: https://github.com/arunps12/Maternal‑speech‑and‑early‑language‑development‑in‑French‑4‑12‑month‑old‑infants
-
-
-Thank you for exploring this research project! Feel free to open issues or pull requests if you’d like to contribute or reuse code/data.
+**License:** [GNU GPL v3.0](LICENSE)
