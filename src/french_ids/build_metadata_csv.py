@@ -83,6 +83,8 @@ def build_csv(config: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
             skipped.append({
                 "file": str(tg_path),
                 "raw_label": tg_path.stem,
+                "start_sec": "",
+                "end_sec": "",
                 "reason": (
                     "Filename does not match expected pattern "
                     "speakerid_session_activity_time"
@@ -97,6 +99,8 @@ def build_csv(config: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
             skipped.append({
                 "file": str(tg_path),
                 "raw_label": "",
+                "start_sec": "",
+                "end_sec": "",
                 "reason": "Failed to read TextGrid file",
             })
             n_skipped_files += 1
@@ -108,6 +112,8 @@ def build_csv(config: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
             skipped.append({
                 "file": str(tg_path),
                 "raw_label": "",
+                "start_sec": "",
+                "end_sec": "",
                 "reason": "No 'vowel' tier found (see log for available tier names)",
             })
             n_skipped_files += 1
@@ -144,6 +150,8 @@ def build_csv(config: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
                 skipped.append({
                     "file": str(tg_path),
                     "raw_label": raw_label,
+                    "start_sec": start_sec,
+                    "end_sec": round(float(interval.xmax), 2),
                     "reason": f"Cannot parse label '{corrected_label}'",
                 })
                 continue
@@ -174,10 +182,11 @@ def build_csv(config: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     df = df[~mask_remove].reset_index(drop=True)
 
     # ── Skipped DataFrame ────────────────────────────────────────────────────
+    _skipped_cols = ["file", "raw_label", "start_sec", "end_sec", "reason"]
     skipped_df = (
-        pd.DataFrame(skipped, columns=["file", "raw_label", "reason"])
+        pd.DataFrame(skipped, columns=_skipped_cols)
         if skipped
-        else pd.DataFrame(columns=["file", "raw_label", "reason"])
+        else pd.DataFrame(columns=_skipped_cols)
     )
 
     stats = {
