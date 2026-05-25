@@ -1,110 +1,217 @@
-# Maternal Speech and Early Language Development in French 4–12-Month-Old Infants
+﻿# Maternal Speech and Early Language Development in French 4–12-Month-Old Infants
 
-This repository contains the analysis pipeline, scripts, and results for the study **“Maternal speech and early language development in French 4–12-month-old infants.”**  
-The project investigates how the acoustic characteristics of maternal *infant-directed speech* (IDS) change as infants grow from 4 to 12 months of age, focusing on vowel acoustics, variability, and distinctiveness.
+This repository provides a reproducible pipeline for extracting vowel metadata
+from Praat TextGrid files produced in a study of French maternal
+infant-directed speech (IDS).  The pipeline reads paired .TextGrid and .wav
+files, applies label corrections, and writes a structured CSV ready for
+downstream acoustic analysis.
 
----
-
-## 🧠 Overview
-
-Mothers adjust their speech acoustically when interacting with infants, which is thought to support phonetic learning.  
-This project examines whether specific **acoustic measures**—such as pitch, pitch range, vowel duration, vowel space area, vowel variability, and vowel distinctiveness—systematically vary with **child age** in French IDS.
-
-Analyses are based on **107 audio recordings** of French-speaking mothers addressing their infants at 4, 8, and 12 months.  
-A total of **10 671 vowels** were annotated and analyzed.
+The study examines how acoustic characteristics of maternal IDS change as
+infants grow from 4 to 12 months of age, with a focus on vowel acoustics,
+variability, and distinctiveness, based on 107 recordings and 10 671 annotated
+vowels.
 
 ---
 
-## 🔧 Data Processing Pipeline
+## Requirements
 
-1. **Annotation**
-   - TextGrid files were generated for each recording using *Praat*.
-   - Vowel tiers were aligned manually and exported using the Python library `textgrid`.
+- Python 3.10 or later
+- [uv](https://docs.astral.sh/uv/) — fast Python package and project manager
 
-2. **Feature Extraction**
-   - Implemented with [`parselmouth`](https://github.com/YannickJadoul/Parselmouth).
-   - Extracted features for each vowel:
-     - Mean, minimum, and maximum **pitch (Hz)**
-     - **Formants (F1, F2)** using Burg method with optimized formant ceilings
-     - **Vowel duration (s)**  
-   - All features were stored in structured DataFrames.
+### Install uv
 
-3. **Acoustic Measure Computation**  
-   Implemented in [`acoustic_measures.py`](acoustic_measures.py):
+On macOS / Linux:
 
-   | Measure | Description | Unit | Function |
-   |----------|--------------|------|-----------|
-   | **Pitch** | Mean fundamental frequency converted to semitones above 10 Hz | semitones | `pitch_in_st()` |
-   | **Pitch Range** | Max–min pitch difference | semitones | `range_in_st()` |
-   | **Duration** | Vowel length | ms | `duration_in_ms()` |
-   | **Vowel Space Area** | Area of polygon formed by mean F1–F2 values | Hz² | `vowel_space_expansion()` |
-   | **Vowel Variability** | Elliptical area based on σF1×σF2 | Hz² | `vowel_variability()` |
-   | **Vowel Distinctiveness** | Ratio of between-vowel to total variance in F1/F2 | unitless | `vowel_distinctiveness()` |
-
-4. **Directory and Path Management**  
-   Defined in [`path.py`](path.py) using utility functions from [`utils.py`](utils.py):
-   - `create_dir()` ensures that output directories (`acoustic_measures/`, `StatPlots/`, etc.) exist.
-   - `Hz_to_semitones()` converts raw pitch values for perceptual scaling.
-
----
-
-## 📊 Statistical Analysis
-
-Statistical modeling was carried out in **R (4.2.3)** using the packages `lme4`, `lmerTest`, `car`, and `boot`.
-
-- **Linear Mixed-Effects Models (LMMs)** tested how each acoustic measure varied with infant age.
-- **Fixed effects:** `AgeInDays (z-scaled)`, `SES`, `Gender`, and their interactions.
-- **Random effects:** participant intercepts and random slopes (simplified when singular fits occurred).
-- **Model comparison:** Likelihood-ratio test between full and null models.
-- **Confidence intervals:** obtained via bootstrapping (1 000 iterations).
-- **Collinearity diagnostics:** Variance Inflation Factors (VIF < 2).
-- **Model validation:** residual inspection and DHARMa diagnostics.
-
-Implementation and outputs are documented in [`stat_analyses.Rmd`](stat_analyses.Rmd) and rendered in [`stat_analyses.pdf`](stat_analyses.pdf).
-
----
-
-## 📁 Repository Structure
-
-```
-Maternal-speech-and-early-language-development-in-French-4-12-month-old-infants/
-│
-├── Notebook/                         # R notebook and exploratory analyses
-├── acoustic_measures.py              # Functions for vowel-based acoustic metrics
-├── utils.py                          # Utility functions (directory creation, Hz→st conversion)
-├── path.py                           # Path setup for saving analysis outputs
-├── Require_functions_stat_analyses.R # Helper R functions for LMM fitting
-├── stat_analyses.Rmd / .pdf          # Main R-based statistical analysis
-├── LICENSE                           # GNU General Public License v3
-└── README.md                         # (this file)
-```
-
----
-
-## 🧩 Dependencies
-
-### Python
 ```bash
-pip install numpy pandas scipy parselmouth textgrid soundfile matplotlib
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### R
-```r
-install.packages(c("lme4", "lmerTest", "car", "boot", "merTools", "DHARMa", "glmmTMB"))
+On Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+After installation, restart your terminal so the `uv` command is available.
+
+---
+
+## Setup
+
+Clone the repository and install all dependencies into an isolated virtual
+environment managed by uv:
+
+```bash
+git clone https://github.com/arunps12/Maternal-speech-and-early-language-development-in-French-4-12-month-old-infants.git
+cd Maternal-speech-and-early-language-development-in-French-4-12-month-old-infants
+uv sync
+```
+
+`uv sync` reads `pyproject.toml`, creates a `.venv/` virtual environment, and
+installs `pandas`, `pyyaml`, and `praat-parselmouth` automatically.
+
+---
+
+## Configuration
+
+Open `config/config.yaml` and set `input_folder` to the directory that contains
+your .TextGrid and .wav files:
+
+```yaml
+paths:
+  input_folder: "PATH_TO_TEXTGRID_AND_WAV_FOLDER"   # <-- edit this
+  output_csv: "outputs/french_vowels_metadata.csv"
+  skipped_labels_csv: "outputs/skipped_labels.csv"
+
+filters:
+  min_duration_ms: 30
+  remove_registers:
+    - "IDS(chant)"
+
+features:
+  pitch: false
+  formants_mean: false
+  formants_central_frame: false
+```
+
+All other values can be left as-is for the default metadata-only run.  The
+`features` flags are reserved for a future acoustic extraction step; set them
+to `false` to produce a metadata-only CSV with acoustic columns present but
+empty.
+
+---
+
+## Running the pipeline
+
+```bash
+uv run python scripts/build_french_vowel_metadata.py --config config/config.yaml
+```
+
+The script prints a summary on completion:
+
+```
+=== Pipeline Summary ===
+  TextGrid files found          : 107
+  Files successfully processed  : 107
+  Files skipped                 : 0
+  Intervals read (non-empty)    : 11 204
+  Removed (duration < 30 ms)    : 533
+  Removed (IDS(chant))          : 0
+  Skipped (parse errors)        : 0
+  Final rows                    : 10 671
+  Output CSV                    : outputs/french_vowels_metadata.csv
+  Skipped labels CSV            : outputs/skipped_labels.csv
+========================
 ```
 
 ---
 
-## 📈 Results Summary
+## Output files
 
-- **Pitch and Vowel Space Area:** no significant change with age.  
-- **Pitch Range and Duration:** significantly increased with age.  
-- **Vowel Variability & Distinctiveness:** showed no systematic trend across months.  
+Both files are written to the `outputs/` directory.
 
-These results suggest that while mothers modulate prosodic range as infants grow, vowel category structure remains relatively stable during the first year.
+### `french_vowels_metadata.csv`
+
+One row per vowel interval.  Columns:
+
+| Column | Description |
+|--------|-------------|
+| `speakerid` | Speaker identifier as found in the filename (e.g. `c012`) |
+| `session` | Recording session (e.g. `4m`, `8m`, `12m`) |
+| `activity` | Activity label from the filename (e.g. `bath`) |
+| `time` | Time code from the filename (e.g. `1925`) |
+| `word` | Word containing the vowel |
+| `vowel` | Vowel category label |
+| `register` | `IDS` or `ADS` |
+| `start_sec` | Interval onset in seconds, rounded to 2 decimal places |
+| `duration_sec` | Duration in seconds, rounded to 2 decimal places |
+| `duration_ms` | Duration in milliseconds, rounded to 2 decimal places |
+| `mean_pitch` to `central_F4` | Acoustic feature columns — empty (NaN) until features are enabled |
+
+Full column order: `speakerid`, `session`, `activity`, `time`, `word`, `vowel`,
+`register`, `start_sec`, `duration_sec`, `duration_ms`, `mean_pitch`,
+`min_pitch`, `max_pitch`, `pitch_range`, `formant_ceiling`, `mean_F1`,
+`mean_F2`, `mean_F3`, `mean_F4`, `central_F1`, `central_F2`, `central_F3`,
+`central_F4`.
+
+### `skipped_labels.csv`
+
+Rows that could not be processed, with columns `file`, `raw_label`, `reason`.
+Created only when there are skipped entries.
 
 ---
-## 📜 Citation
+
+## Filename convention
+
+TextGrid files must follow the pattern:
+
+```
+speakerid_session_activity_time.TextGrid
+```
+
+Example: `c012_8m_bath_1925.TextGrid` is parsed as:
+
+| Field | Value |
+|-------|-------|
+| speakerid | c012 |
+| session | 8m |
+| activity | bath |
+| time | 1925 |
+
+---
+
+## Filters applied
+
+- Intervals shorter than `min_duration_ms` (default 30 ms) are removed.
+- Rows where `register` is `IDS(chant)` are removed.
+- Intervals with empty labels (silences) are skipped silently.
+- Vowel `en` is preserved as-is and is not converted to `an`.
+
+---
+
+## Running the tests
+
+```bash
+uv run pytest tests/ -v
+```
+
+48 tests cover filename parsing, all 12 label corrections, register
+normalisation, label parsing, `en` vowel preservation, and `IDS(chant)`
+filtering.
+
+---
+
+## Project structure
+
+```
+config/
+  config.yaml                     paths, filters, and feature flags
+
+src/french_ids/
+  __init__.py
+  config.py                       YAML config loader
+  filename_parser.py              speakerid_session_activity_time parser
+  label_cleaning.py               label corrections and register normalisation
+  textgrid_reader.py              parselmouth-based TextGrid reading
+  build_metadata_csv.py           main pipeline logic and CLI entry
+  praat_features.py               placeholder for future Praat extraction
+
+scripts/
+  build_french_vowel_metadata.py  command-line entry point
+
+outputs/                          generated CSV files (directory tracked by git)
+
+tests/
+  test_filename_parser.py
+  test_label_cleaning.py
+
+pyproject.toml                    uv / hatchling packaging and pytest config
+```
+
+---
+
+## Citation
+
 If you use or build upon this work, please cite:
 
 ```bibtex
@@ -115,14 +222,16 @@ If you use or build upon this work, please cite:
   howpublished = {\url{https://github.com/arunps12/Maternal-speech-and-early-language-development-in-French-4-12-month-old-infants}},
   note         = {GPL-3.0 License}
 }
----
 ```
-## 📬 Contact
 
-**Arun Prakash Singh**  
-Department of Linguistics and Scandinavian Studies, University of Oslo  
-📧 arunps@uio.no  
-🔗 [https://github.com/arunps12](https://github.com/arunps12)
+---
+
+## Contact
+
+**Arun Prakash Singh**
+Department of Linguistics and Scandinavian Studies, University of Oslo
+arunps@uio.no
+[https://github.com/arunps12](https://github.com/arunps12)
 
 ---
 
@@ -130,83 +239,10 @@ Department of Linguistics and Scandinavian Studies, University of Oslo
 
 ---
 
-## 🔄 Reproducible Preprocessing Pipeline (New)
+## About
 
-A clean, reproducible TextGrid-to-CSV preprocessing pipeline has been added to
-the repository.  It reads all `.TextGrid` files from a configurable input
-folder, extracts vowel-tier intervals, applies label corrections, and writes a
-structured metadata CSV ready for downstream analysis.
-
-> **Note on legacy scripts** — the original scripts (`acoustic_measures.py`,
-> `path.py`, `plots.py`, `utils.py`) and the `Notebook/` directory are kept
-> **unchanged** in the repository root.  They may later be moved to
-> `scripts/legacy/` once the new pipeline has been fully validated.
-
-### Quick start
-
-```bash
-# 1. Install dependencies with uv
-uv sync
-
-# 2. Set your data folder in config/config.yaml
-#    (replace PATH_TO_TEXTGRID_AND_WAV_FOLDER with the real path)
-
-# 3. Run the pipeline
-uv run python scripts/build_french_vowel_metadata.py --config config/config.yaml
-```
-
-Outputs written to `outputs/`:
-
-| File | Description |
-|------|-------------|
-| `french_vowels_metadata.csv` | One row per vowel interval; acoustic columns present but empty (`NaN`) until feature extraction is enabled |
-| `skipped_labels.csv` | Files or labels that could not be processed, with reasons |
-
-### Output CSV columns
-
-`speakerid`, `session`, `activity`, `time`, `word`, `vowel`, `register`,
-`start_sec`, `duration_sec`, `duration_ms`,
-`mean_pitch`, `min_pitch`, `max_pitch`, `pitch_range`,
-`formant_ceiling`, `mean_F1`, `mean_F2`, `mean_F3`, `mean_F4`,
-`central_F1`, `central_F2`, `central_F3`, `central_F4`
-
-### New project structure
-
-```
-config/
-  config.yaml                    # paths, filters, feature flags
-
-src/french_ids/
-  __init__.py
-  config.py                      # YAML config loader
-  filename_parser.py             # speakerid_session_activity_time parser
-  label_cleaning.py              # label corrections, register normalisation
-  textgrid_reader.py             # parselmouth-based TextGrid reading
-  build_metadata_csv.py          # main pipeline logic
-  praat_features.py              # placeholder for future Praat extraction
-
-scripts/
-  build_french_vowel_metadata.py # CLI entry point
-
-outputs/                         # generated CSV files (git-tracked directory)
-
-tests/
-  test_filename_parser.py
-  test_label_cleaning.py
-
-pyproject.toml                   # uv / hatchling packaging
-```
-
-### Running the tests
-
-```bash
-uv run pytest tests/
-```
-
----
-
-## 🌟 About Me
-
-Hi there! I'm **Arun Prakash Singh**, a **Marie Curie Research Fellow at the University of Oslo (UiO)**.  
-My research focuses on **speech technology, data engineering, and machine learning**, with an emphasis on building intelligent, data-driven systems that model human communication and learning.  
-I am passionate about integrating **AI, analytics, and large-scale data pipelines** to advance our understanding of how humans process and acquire language.
+I am Arun Prakash Singh, a Marie Curie Research Fellow at the University of Oslo (UiO).
+My research focuses on speech technology, data engineering, and machine learning, with an
+emphasis on building intelligent, data-driven systems that model human communication and
+learning.  I am passionate about integrating AI, analytics, and large-scale data pipelines
+to advance our understanding of how humans process and acquire language.
