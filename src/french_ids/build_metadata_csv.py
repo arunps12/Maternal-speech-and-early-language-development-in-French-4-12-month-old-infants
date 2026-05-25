@@ -105,14 +105,10 @@ def build_csv(config: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         # Find vowel tier
         tier = find_vowel_tier(tg)
         if tier is None:
-            available = [t.name for t in tg.tiers]
             skipped.append({
                 "file": str(tg_path),
                 "raw_label": "",
-                "reason": (
-                    f"No 'vowel' tier found. "
-                    f"Available tiers: {available}"
-                ),
+                "reason": "No 'vowel' tier found (see log for available tier names)",
             })
             n_skipped_files += 1
             continue
