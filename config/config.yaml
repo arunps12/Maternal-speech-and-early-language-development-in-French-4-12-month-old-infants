@@ -1,0 +1,14 @@
+paths:
+  input_folder: "PATH_TO_TEXTGRID_AND_WAV_FOLDER"
+  output_csv: "outputs/french_vowels_metadata.csv"
+  skipped_labels_csv: "outputs/skipped_labels.csv"
+
+filters:
+  min_duration_ms: 30
+  remove_registers:
+    - "IDS(chant)"
+
+features:
+  pitch: false
+  formants_mean: false
+  formants_central_frame: false

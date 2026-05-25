@@ -129,6 +129,82 @@ Department of Linguistics and Scandinavian Studies, University of Oslo
 **License:** [GNU GPL v3.0](LICENSE)
 
 ---
+
+## 🔄 Reproducible Preprocessing Pipeline (New)
+
+A clean, reproducible TextGrid-to-CSV preprocessing pipeline has been added to
+the repository.  It reads all `.TextGrid` files from a configurable input
+folder, extracts vowel-tier intervals, applies label corrections, and writes a
+structured metadata CSV ready for downstream analysis.
+
+> **Note on legacy scripts** — the original scripts (`acoustic_measures.py`,
+> `path.py`, `plots.py`, `utils.py`) and the `Notebook/` directory are kept
+> **unchanged** in the repository root.  They may later be moved to
+> `scripts/legacy/` once the new pipeline has been fully validated.
+
+### Quick start
+
+```bash
+# 1. Install dependencies with uv
+uv sync
+
+# 2. Set your data folder in config/config.yaml
+#    (replace PATH_TO_TEXTGRID_AND_WAV_FOLDER with the real path)
+
+# 3. Run the pipeline
+uv run python scripts/build_french_vowel_metadata.py --config config/config.yaml
+```
+
+Outputs written to `outputs/`:
+
+| File | Description |
+|------|-------------|
+| `french_vowels_metadata.csv` | One row per vowel interval; acoustic columns present but empty (`NaN`) until feature extraction is enabled |
+| `skipped_labels.csv` | Files or labels that could not be processed, with reasons |
+
+### Output CSV columns
+
+`speakerid`, `session`, `activity`, `time`, `word`, `vowel`, `register`,
+`start_sec`, `duration_sec`, `duration_ms`,
+`mean_pitch`, `min_pitch`, `max_pitch`, `pitch_range`,
+`formant_ceiling`, `mean_F1`, `mean_F2`, `mean_F3`, `mean_F4`,
+`central_F1`, `central_F2`, `central_F3`, `central_F4`
+
+### New project structure
+
+```
+config/
+  config.yaml                    # paths, filters, feature flags
+
+src/french_ids/
+  __init__.py
+  config.py                      # YAML config loader
+  filename_parser.py             # speakerid_session_activity_time parser
+  label_cleaning.py              # label corrections, register normalisation
+  textgrid_reader.py             # parselmouth-based TextGrid reading
+  build_metadata_csv.py          # main pipeline logic
+  praat_features.py              # placeholder for future Praat extraction
+
+scripts/
+  build_french_vowel_metadata.py # CLI entry point
+
+outputs/                         # generated CSV files (git-tracked directory)
+
+tests/
+  test_filename_parser.py
+  test_label_cleaning.py
+
+pyproject.toml                   # uv / hatchling packaging
+```
+
+### Running the tests
+
+```bash
+uv run pytest tests/
+```
+
+---
+
 ## 🌟 About Me
 
 Hi there! I'm **Arun Prakash Singh**, a **Marie Curie Research Fellow at the University of Oslo (UiO)**.  

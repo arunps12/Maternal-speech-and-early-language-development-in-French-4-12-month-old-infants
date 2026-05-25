@@ -1,0 +1,20 @@
+# Legacy / local-only files (old scripts kept for reference but not tracked)
+legacy/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+.pytest_cache/
+
+# R local artifacts
+.RData
+.Rhistory
+
+# Generated outputs — keep .gitkeep but ignore actual CSV results
+outputs/*.csv
+
+# OS artefacts
+.DS_Store
+Thumbs.db
