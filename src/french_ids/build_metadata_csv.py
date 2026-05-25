@@ -73,7 +73,8 @@ def build_csv(config: dict) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     n_skipped_parse = 0
 
     # ── Process each file ───────────────────────────────────────────────────
-    for tg_path in tg_files:
+    for idx, tg_path in enumerate(tg_files):
+        logger.info("[%d/%d] %s", idx + 1, n_files_found, tg_path.name)
 
         # Parse filename metadata
         file_meta = parse_filename(tg_path.stem)

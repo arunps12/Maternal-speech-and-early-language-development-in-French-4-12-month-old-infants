@@ -1,5 +1,5 @@
 paths:
-  input_folder: "PATH_TO_TEXTGRID_AND_WAV_FOLDER"
+  input_folder: '\\hypatia.uio.no\lh-hf-iln-sociocognitivelab\Research\BabyLearn\french_data_arun'
   output_csv: "outputs/french_vowels_metadata.csv"
   skipped_labels_csv: "outputs/skipped_labels.csv"
 
