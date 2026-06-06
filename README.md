@@ -1,10 +1,11 @@
 ﻿# Maternal Speech and Early Language Development in French 4–12-Month-Old Infants
 
-This repository provides a reproducible pipeline for extracting vowel metadata
-from Praat TextGrid files produced in a study of French maternal
-infant-directed speech (IDS).  The pipeline reads paired .TextGrid and .wav
-files, applies label corrections, and writes a structured CSV ready for
-downstream acoustic analysis.
+This repository provides a reproducible two-stage pipeline for extracting vowel
+metadata and acoustic features from Praat TextGrid files produced in a study
+of French maternal infant-directed speech (IDS). The workflow reads paired
+.TextGrid and .wav files, applies label corrections, estimates speaker-vowel
+formant ceilings, and writes structured CSV outputs ready for downstream
+acoustic analysis.
 
 The study examines how acoustic characteristics of maternal IDS change as
 infants grow from 4 to 12 months of age, with a focus on vowel acoustics,
@@ -74,18 +75,65 @@ features:
   formants_central_frame: false
 ```
 
-All other values can be left as-is for the default metadata-only run.  The
-`features` flags are reserved for a future acoustic extraction step; set them
-to `false` to produce a metadata-only CSV with acoustic columns present but
-empty.
+The configuration now supports both stages of the pipeline:
+
+```yaml
+paths:
+  input_folder: "PATH_TO_TEXTGRID_AND_WAV_FOLDER"
+  metadata_csv: "outputs/french_vowels_metadata.csv"
+  output_csv: "outputs/french_vowels_acoustic_features.csv"
+  formant_ceiling_csv: "outputs/formant_ceilings.csv"
+  skipped_labels_csv: "outputs/skipped_labels.csv"
+  log_file: "outputs/acoustic_feature_log.csv"
+```
+
+Stage 1 writes `metadata_csv`. Stage 2 reads that metadata CSV, estimates
+speakerid × vowel formant ceilings first, saves the ceiling table separately,
+then merges the ceilings back into metadata before computing final formants and
+pitch.
 
 ---
 
 ## Running the pipeline
 
+### Stage 1: Build vowel metadata
+
 ```bash
 uv run python scripts/build_french_vowel_metadata.py --config config/config.yaml
 ```
+
+This produces `outputs/french_vowels_metadata.csv` and, when needed,
+`outputs/skipped_labels.csv`.
+
+### Stage 2: Compute acoustic features
+
+```bash
+uv run python scripts/compute_acoustic_features.py --config config/config.yaml
+```
+
+Optional overrides:
+
+```bash
+uv run python scripts/compute_acoustic_features.py --config config/config.yaml --recompute-ceilings
+uv run python scripts/compute_acoustic_features.py --config config/config.yaml --metadata-csv outputs/french_vowels_metadata.csv --output-csv outputs/french_vowels_acoustic_features.csv
+```
+
+Stage 2 always follows this order:
+
+1. Load the metadata CSV.
+2. Group rows by `speakerid` and `vowel`.
+3. Estimate formant ceilings per `speakerid × vowel` group.
+4. Save `outputs/formant_ceilings.csv`.
+5. Merge the ceiling table back into metadata on `speakerid` and `vowel`.
+6. Compute final formants using the row-specific merged ceiling.
+7. Compute pitch features.
+8. Save the final acoustic CSV and the audit log.
+
+Final formants are never computed before ceiling estimation, and ceilings are
+never recomputed per token. If ceiling caching is enabled and
+`outputs/formant_ceilings.csv` already exists, the pipeline will reuse it only
+after validating that the file contains `speakerid`, `vowel`, and
+`formant_ceiling`. Otherwise it will recompute the ceiling table.
 
 The script prints a summary on completion:
 
@@ -126,7 +174,39 @@ One row per vowel interval.  Columns:
 | `start_sec` | Interval onset in seconds, rounded to 2 decimal places |
 | `duration_sec` | Duration in seconds, rounded to 2 decimal places |
 | `duration_ms` | Duration in milliseconds, rounded to 2 decimal places |
-| `mean_pitch` to `central_F4` | Acoustic feature columns — empty (NaN) until features are enabled |
+| `mean_pitch` to `central_F4` | Acoustic feature columns — empty (NaN) in the stage-1 metadata CSV |
+
+### `french_vowels_acoustic_features.csv`
+
+Stage-2 output with the same token rows plus filled acoustic columns and status
+tracking columns:
+
+| Column | Description |
+|--------|-------------|
+| `mean_pitch`, `min_pitch`, `max_pitch`, `pitch_range` | Pitch features from Praat/Parselmouth |
+| `formant_ceiling` | Speaker-vowel-specific ceiling merged into each row |
+| `mean_F1` to `mean_F4` | Mean formants sampled across the vowel segment |
+| `central_F1` to `central_F4` | Central-frame formants sampled at the midpoint |
+| `feature_status` | `success` or `failed` |
+| `feature_error` | Clear failure label for rows that could not be processed |
+
+### `formant_ceilings.csv`
+
+One row per `speakerid × vowel` group with columns:
+
+| Column | Description |
+|--------|-------------|
+| `speakerid` | Speaker identifier |
+| `vowel` | Vowel label |
+| `formant_ceiling` | Selected ceiling in Hz |
+| `n_tokens` | Number of valid tokens used during optimization |
+| `optimization_status` | `optimized` or fallback status |
+
+### `acoustic_feature_log.csv`
+
+Per-row audit log saved by stage 2. Columns:
+
+`row_index`, `speakerid`, `vowel`, `audio_file`, `start_sec`, `duration_sec`, `feature_status`, `feature_error`, `formant_ceiling`.
 
 Full column order: `speakerid`, `session`, `activity`, `time`, `word`, `vowel`,
 `register`, `start_sec`, `duration_sec`, `duration_ms`, `mean_pitch`,
@@ -185,7 +265,7 @@ filtering.
 
 ```
 config/
-  config.yaml                     paths, filters, and feature flags
+  config.yaml                     paths, filters, and stage-1/stage-2 settings
 
 src/french_ids/
   __init__.py
@@ -194,14 +274,24 @@ src/french_ids/
   label_cleaning.py               label corrections and register normalisation
   textgrid_reader.py              parselmouth-based TextGrid reading
   build_metadata_csv.py           main pipeline logic and CLI entry
-  praat_features.py               placeholder for future Praat extraction
+  praat_features.py               AcousticFeatureExtractor coordinator
+  acoustic/
+    __init__.py
+    audio.py                      audio lookup, loading, and segment extraction
+    pitch.py                      pitch feature extraction
+    formants.py                   Burg formant extraction using row ceilings
+    ceilings.py                   speakerid × vowel ceiling optimization
+    quality_control.py            metadata/config validation and safe errors
+    utils.py                      shared helpers and audit-log builders
 
 scripts/
   build_french_vowel_metadata.py  command-line entry point
+  compute_acoustic_features.py    stage-2 acoustic feature extraction CLI
 
 outputs/                          generated CSV files (directory tracked by git)
 
 tests/
+  test_acoustic_features.py
   test_filename_parser.py
   test_label_cleaning.py
 

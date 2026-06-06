@@ -1,7 +1,10 @@
 paths:
   input_folder: '\\hypatia.uio.no\lh-hf-iln-sociocognitivelab\Research\BabyLearn\french_data_arun'
-  output_csv: "outputs/french_vowels_metadata.csv"
+  metadata_csv: "outputs/french_vowels_metadata.csv"
+  output_csv: '\\hypatia.uio.no\lh-hf-iln-sociocognitivelab\Research\BabyLearn\french_outputs\french_vowels_acoustic_features.csv'
+  formant_ceiling_csv: '\\hypatia.uio.no\lh-hf-iln-sociocognitivelab\Research\BabyLearn\french_outputs\formant_ceilings.csv'
   skipped_labels_csv: "outputs/skipped_labels.csv"
+  log_file: '\\hypatia.uio.no\lh-hf-iln-sociocognitivelab\Research\BabyLearn\french_outputs\acoustic_feature_log.csv'
 
 filters:
   min_duration_ms: 30
@@ -9,6 +12,65 @@ filters:
     - "IDS(chant)"
 
 features:
-  pitch: false
-  formants_mean: false
-  formants_central_frame: false
+  pitch: true
+  formant_ceiling: true
+  formants_mean: true
+  formants_central_frame: true
+
+pitch:
+  method: "praat_parselmouth"
+  time_step: 0.0
+  pitch_floor_hz: 100
+  pitch_ceiling_hz: 600
+  unit: "Hertz"
+
+formant_ceiling:
+  method: "speaker_vowel_optimization"
+  group_by:
+    - "speakerid"
+    - "vowel"
+  coarse_search:
+    min_ceiling_hz: 4500
+    max_ceiling_hz: 6500
+    step_hz: 100
+  fine_search:
+    window_hz: 100
+    step_hz: 10
+  number_of_formants: 5
+  time_step: 0.0025
+  window_length: 0.025
+  pre_emphasis_from_hz: 50
+  selection_criterion: "min_variance_log_F1_F2"
+  min_tokens_per_group: 3
+  fallback_ceiling_hz: 5500
+  cache_results: true
+
+formants:
+  method: "praat_burg_parselmouth"
+  number_of_formants: 5
+  time_step: 0.0025
+  window_length: 0.025
+  pre_emphasis_from_hz: 50
+  use_speaker_vowel_ceiling: true
+  fallback_ceiling_hz: 5500
+  output_formants:
+    - F1
+    - F2
+    - F3
+    - F4
+  central_frame:
+    method: "midpoint"
+
+error_handling:
+  continue_on_error: true
+  fill_failed_features_with: null
+  add_status_columns: true
+  status_column: "feature_status"
+  error_column: "feature_error"
+  catch_parselmouth_errors: true
+
+logging:
+  save_log: true
+  verbose: true
+  progress_every_n_rows: 500
+  log_each_ceiling_group: true
