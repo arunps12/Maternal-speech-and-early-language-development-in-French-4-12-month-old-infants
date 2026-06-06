@@ -227,7 +227,12 @@ def run(config_path: Path) -> None:
         raise SystemExit(1)
 
     # ── Resolve output paths (relative to cwd) ───────────────────────────────
-    output_csv = Path(config["paths"]["output_csv"])
+    metadata_output = config["paths"].get("metadata_csv", config["paths"].get("output_csv"))
+    if metadata_output is None:
+        logger.error("config paths must define metadata_csv or output_csv")
+        raise SystemExit(1)
+
+    output_csv = Path(metadata_output)
     if not output_csv.is_absolute():
         output_csv = Path.cwd() / output_csv
 
