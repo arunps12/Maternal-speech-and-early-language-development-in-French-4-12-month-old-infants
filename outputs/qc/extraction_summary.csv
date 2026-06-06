@@ -1,0 +1,6 @@
+metric,value
+total_rows,21341.0
+successful_rows,21106.0
+failed_rows,235.0
+success_percentage,98.9
+failed_percentage,1.1

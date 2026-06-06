@@ -1,0 +1,5 @@
+register,feature_error,n_rows
+IDS,invalid_time_interval,7
+IDS,pitch_not_detected,88
+ADS,invalid_time_interval,111
+ADS,pitch_not_detected,29

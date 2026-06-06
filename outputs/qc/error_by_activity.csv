@@ -1,0 +1,5 @@
+activity,feature_error,n_rows
+bath,pitch_not_detected,44
+meal,invalid_time_interval,118
+meal,pitch_not_detected,55
+play,pitch_not_detected,18

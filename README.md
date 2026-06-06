@@ -55,27 +55,45 @@ installs `pandas`, `pyyaml`, and `praat-parselmouth` automatically.
 
 ## Configuration
 
-Open `config/config.yaml` and set `input_folder` to the directory that contains
-your .TextGrid and .wav files:
+The repository can be run with one shared config file or with two separate
+config files, one for stage 1 and one for stage 2.
+
+The current project uses one file: [config/config.yaml](config/config.yaml).
+
+At minimum, always set:
 
 ```yaml
 paths:
-  input_folder: "PATH_TO_TEXTGRID_AND_WAV_FOLDER"   # <-- edit this
-  output_csv: "outputs/french_vowels_metadata.csv"
+  input_folder: "PATH_TO_TEXTGRID_AND_WAV_FOLDER"
+```
+
+### Stage 1 config: metadata extraction
+
+Stage 1 uses these keys:
+
+```yaml
+paths:
+  input_folder: "PATH_TO_TEXTGRID_AND_WAV_FOLDER"
+  metadata_csv: "outputs/french_vowels_metadata.csv"
   skipped_labels_csv: "outputs/skipped_labels.csv"
 
 filters:
   min_duration_ms: 30
   remove_registers:
     - "IDS(chant)"
-
-features:
-  pitch: false
-  formants_mean: false
-  formants_central_frame: false
 ```
 
-The configuration now supports both stages of the pipeline:
+Notes:
+
+- Stage 1 writes the metadata CSV to `paths.metadata_csv`.
+- For backward compatibility, if `metadata_csv` is missing, stage 1 falls back
+  to `paths.output_csv`.
+- Stage 1 does not use the `pitch`, `formant_ceiling`, `formants`, or
+  `log_file` sections.
+
+### Stage 2 config: acoustic feature extraction
+
+Stage 2 uses these keys:
 
 ```yaml
 paths:
@@ -83,14 +101,55 @@ paths:
   metadata_csv: "outputs/french_vowels_metadata.csv"
   output_csv: "outputs/french_vowels_acoustic_features.csv"
   formant_ceiling_csv: "outputs/formant_ceilings.csv"
-  skipped_labels_csv: "outputs/skipped_labels.csv"
   log_file: "outputs/acoustic_feature_log.csv"
+
+filters:
+  min_duration_ms: 30
+
+pitch:
+  time_step: 0.0
+  pitch_floor_hz: 100
+  pitch_ceiling_hz: 600
+
+formant_ceiling:
+  min_tokens_per_group: 3
+  fallback_ceiling_hz: 5500
+  cache_results: true
+
+formants:
+  number_of_formants: 5
+  time_step: 0.0025
+  window_length: 0.025
+  pre_emphasis_from_hz: 50
+
+error_handling:
+  status_column: "feature_status"
+  error_column: "feature_error"
+
+logging:
+  save_log: true
 ```
 
-Stage 1 writes `metadata_csv`. Stage 2 reads that metadata CSV, estimates
-speakerid × vowel formant ceilings first, saves the ceiling table separately,
-then merges the ceilings back into metadata before computing final formants and
-pitch.
+Notes:
+
+- Stage 2 reads `paths.metadata_csv` as input.
+- Stage 2 writes the acoustic feature CSV to `paths.output_csv`.
+- Stage 2 writes the speaker-vowel ceiling cache to `paths.formant_ceiling_csv`.
+- Stage 2 writes the per-row audit log to `paths.log_file`.
+
+If you prefer separate config files, a clear pattern is:
+
+- `config/config_metadata.yaml` for stage 1
+- `config/config_acoustics.yaml` for stage 2
+
+The important distinction is:
+
+- stage 1 output = metadata CSV
+- stage 2 output = acoustic features CSV
+
+Stage 2 reads the metadata CSV, estimates speakerid × vowel formant ceilings,
+saves the ceiling table separately, then merges the ceilings back into metadata
+before computing final formants and pitch.
 
 ---
 
@@ -105,10 +164,22 @@ uv run python scripts/build_french_vowel_metadata.py --config config/config.yaml
 This produces `outputs/french_vowels_metadata.csv` and, when needed,
 `outputs/skipped_labels.csv`.
 
+If you use a separate metadata config file:
+
+```bash
+uv run python scripts/build_french_vowel_metadata.py --config config/config_metadata.yaml
+```
+
 ### Stage 2: Compute acoustic features
 
 ```bash
 uv run python scripts/compute_acoustic_features.py --config config/config.yaml
+```
+
+If you use a separate acoustic config file:
+
+```bash
+uv run python scripts/compute_acoustic_features.py --config config/config_acoustics.yaml
 ```
 
 Optional overrides:
@@ -131,9 +202,9 @@ Stage 2 always follows this order:
 
 Final formants are never computed before ceiling estimation, and ceilings are
 never recomputed per token. If ceiling caching is enabled and
-`outputs/formant_ceilings.csv` already exists, the pipeline will reuse it only
-after validating that the file contains `speakerid`, `vowel`, and
-`formant_ceiling`. Otherwise it will recompute the ceiling table.
+`formant_ceilings.csv` already exists, stage 2 treats that CSV as the ceiling
+cache and reuses it only after validating that the cache format and grouping
+are valid. Otherwise it will recompute the ceiling table.
 
 The script prints a summary on completion:
 
@@ -176,6 +247,15 @@ One row per vowel interval.  Columns:
 | `duration_ms` | Duration in milliseconds, rounded to 2 decimal places |
 | `mean_pitch` to `central_F4` | Acoustic feature columns — empty (NaN) in the stage-1 metadata CSV |
 
+Important note about `time`:
+
+- The filename parser keeps the final filename token exactly as it appears in
+  the filename, for example `0815`.
+- When the metadata CSV is reloaded by pandas, that value may display as `815`
+  because it looks numeric.
+- During audio lookup, the pipeline normalizes numeric time values back to
+  4-digit form, so metadata `815` will still resolve to audio stem `0815`.
+
 ### `french_vowels_acoustic_features.csv`
 
 Stage-2 output with the same token rows plus filled acoustic columns and status
@@ -189,6 +269,7 @@ tracking columns:
 | `central_F1` to `central_F4` | Central-frame formants sampled at the midpoint |
 | `feature_status` | `success` or `failed` |
 | `feature_error` | Clear failure label for rows that could not be processed |
+| `feature_error_detail` | Underlying exception text when available |
 
 ### `formant_ceilings.csv`
 
@@ -206,7 +287,12 @@ One row per `speakerid × vowel` group with columns:
 
 Per-row audit log saved by stage 2. Columns:
 
-`row_index`, `speakerid`, `vowel`, `audio_file`, `start_sec`, `duration_sec`, `feature_status`, `feature_error`, `formant_ceiling`.
+`row_index`, `speakerid`, `vowel`, `audio_file`, `start_sec`, `duration_sec`, `feature_status`, `feature_error`, `feature_error_detail`, `formant_ceiling`.
+
+`feature_error` stores the stable failure label.
+
+`feature_error_detail` stores the full underlying error text when available,
+for example the actual Parselmouth exception message.
 
 Full column order: `speakerid`, `session`, `activity`, `time`, `word`, `vowel`,
 `register`, `start_sec`, `duration_sec`, `duration_ms`, `mean_pitch`,
@@ -223,13 +309,19 @@ Created only when there are skipped entries.
 
 ## Filename convention
 
-TextGrid files must follow the pattern:
+TextGrid and WAV files are matched by filename stem. Both files should share
+the same stem:
 
-```
-speakerid_session_activity_time.TextGrid
+```text
+speakerid_session_activity_time
 ```
 
-Example: `c012_8m_bath_1925.TextGrid` is parsed as:
+Examples:
+
+- `c012_8m_bath_1925.TextGrid`
+- `c012_8m_bath_1925.wav`
+
+This is parsed as:
 
 | Field | Value |
 |-------|-------|
@@ -237,6 +329,49 @@ Example: `c012_8m_bath_1925.TextGrid` is parsed as:
 | session | 8m |
 | activity | bath |
 | time | 1925 |
+
+If the activity itself contains underscores, everything between `session` and
+the final token is joined back into `activity`.
+
+Example:
+
+```text
+c012_8m_free_play_1925.TextGrid
+```
+
+This is parsed as:
+
+| Field | Value |
+|-------|-------|
+| speakerid | c012 |
+| session | 8m |
+| activity | free_play |
+| time | 1925 |
+
+### If some filename metadata is unavailable
+
+The parser does not infer missing values. It only splits the filename into
+tokens. If one metadata field is unknown, use a literal placeholder such as
+`none` in that position and keep the full filename structure.
+
+Examples:
+
+- `c012_none_bath_1925.TextGrid`
+- `c012_8m_none_1925.TextGrid`
+- `c012_8m_bath_none.TextGrid`
+
+These are parsed literally, for example `session = none` or `time = none`.
+
+Rules to follow:
+
+- Always keep at least 4 underscore-separated parts.
+- Keep the last token reserved for `time`.
+- Use the same stem for the `.TextGrid` and `.wav` file.
+- If a value is missing, prefer a literal placeholder such as `none` instead of
+  removing that part of the filename.
+
+If the filename has fewer than 4 underscore-separated parts, the file is
+skipped during metadata extraction.
 
 ---
 
@@ -252,12 +387,11 @@ Example: `c012_8m_bath_1925.TextGrid` is parsed as:
 ## Running the tests
 
 ```bash
-uv run pytest tests/ -v
+uv run --extra dev python -m pytest tests -q
 ```
 
-48 tests cover filename parsing, all 12 label corrections, register
-normalisation, label parsing, `en` vowel preservation, and `IDS(chant)`
-filtering.
+The tests cover filename parsing, label corrections, register normalisation,
+metadata extraction, ceiling caching, and the acoustic feature pipeline.
 
 ---
 
