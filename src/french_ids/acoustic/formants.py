@@ -109,7 +109,7 @@ def _sample_times(duration: float, time_step: float) -> list[float]:
 
 def _value_at_time(formants: object, formant_number: int, sample_time: float) -> float:
     try:
-        return float(formants.get_value_at_time(formant_number, sample_time, "Hertz"))
+        return float(formants.get_value_at_time(formant_number, sample_time))
     except Exception:
         return math.nan
 
