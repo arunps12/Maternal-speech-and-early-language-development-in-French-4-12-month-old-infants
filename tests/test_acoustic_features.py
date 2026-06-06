@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from french_ids.acoustic import ceilings
+from french_ids.acoustic import formants as formant_helpers
 from french_ids.config import load_config
 from french_ids.praat_features import ACOUSTIC_COLUMNS, AcousticFeatureExtractor
 
@@ -424,6 +425,70 @@ def test_invalid_cached_ceiling_table_is_recomputed(tmp_path: Path, monkeypatch:
 
     assert result.loc[0, "formant_ceiling"] == 5500.0
     assert result.loc[0, "optimization_status"] == "fallback_too_few_tokens"
+
+
+def test_legacy_cached_ceiling_table_without_optimizer_version_is_recomputed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    config = _base_config(tmp_path)
+    metadata_df = _metadata_df()
+    cache_path = Path(config["paths"]["formant_ceiling_csv"])
+    pd.DataFrame(
+        [
+            {
+                "speakerid": "M01",
+                "vowel": "a",
+                "formant_ceiling": 5500.0,
+                "n_tokens": 3,
+                "optimization_status": "optimized",
+            }
+        ]
+    ).to_csv(cache_path, index=False)
+
+    monkeypatch.setattr(
+        ceilings,
+        "estimate_group_ceiling",
+        lambda speakerid, vowel, group_df, audio_repository, config: {
+            "speakerid": speakerid,
+            "vowel": vowel,
+            "formant_ceiling": 5120.0,
+            "n_tokens": len(group_df),
+            "optimization_status": "optimized",
+            "optimizer_version": ceilings.CURRENT_CEILING_OPTIMIZER_VERSION,
+        },
+    )
+
+    class FakeAudioRepository:
+        def get_segment_for_row(self, row):
+            return object(), tmp_path / "dummy.wav", None
+
+    result = ceilings.estimate_formant_ceilings(
+        metadata_df,
+        FakeAudioRepository(),
+        config,
+        output_path=cache_path,
+        recompute=False,
+    )
+
+    assert result.loc[0, "formant_ceiling"] == 5120.0
+    assert result.loc[0, "optimizer_version"] == ceilings.CURRENT_CEILING_OPTIMIZER_VERSION
+
+
+def test_formant_value_lookup_uses_supported_parselmouth_signature():
+    class FakeFormant:
+        def __init__(self):
+            self.calls: list[tuple[int, float]] = []
+
+        def get_value_at_time(self, formant_number: int, sample_time: float) -> float:
+            self.calls.append((formant_number, sample_time))
+            return 123.4
+
+    fake_formant = FakeFormant()
+
+    value = formant_helpers._value_at_time(fake_formant, 2, 0.05)
+
+    assert value == 123.4
+    assert fake_formant.calls == [(2, 0.05)]
 
 
 def test_save_outputs_writes_audit_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

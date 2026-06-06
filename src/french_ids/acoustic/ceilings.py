@@ -15,6 +15,8 @@ from .utils import MERGE_KEYS
 
 logger = logging.getLogger(__name__)
 
+CURRENT_CEILING_OPTIMIZER_VERSION = 2
+
 
 def estimate_formant_ceilings(
     metadata_df: pd.DataFrame,
@@ -73,7 +75,14 @@ def estimate_formant_ceilings(
 
     ceiling_df = pd.DataFrame(
         rows,
-        columns=["speakerid", "vowel", "formant_ceiling", "n_tokens", "optimization_status"],
+        columns=[
+            "speakerid",
+            "vowel",
+            "formant_ceiling",
+            "n_tokens",
+            "optimization_status",
+            "optimizer_version",
+        ],
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ceiling_df.to_csv(output_path, index=False)
@@ -109,6 +118,7 @@ def estimate_group_ceiling(
             "formant_ceiling": fallback_ceiling,
             "n_tokens": len(valid_segments),
             "optimization_status": "fallback_too_few_tokens",
+            "optimizer_version": CURRENT_CEILING_OPTIMIZER_VERSION,
         }
 
     coarse_candidates = _build_candidates(
@@ -124,6 +134,7 @@ def estimate_group_ceiling(
             "formant_ceiling": fallback_ceiling,
             "n_tokens": len(valid_segments),
             "optimization_status": "fallback_optimization_failed",
+            "optimizer_version": CURRENT_CEILING_OPTIMIZER_VERSION,
         }
 
     fine_window = int(ceiling_config["fine_search"]["window_hz"])
@@ -137,6 +148,7 @@ def estimate_group_ceiling(
             "formant_ceiling": fallback_ceiling,
             "n_tokens": len(valid_segments),
             "optimization_status": "fallback_optimization_failed",
+            "optimizer_version": CURRENT_CEILING_OPTIMIZER_VERSION,
         }
 
     return {
@@ -145,13 +157,14 @@ def estimate_group_ceiling(
         "formant_ceiling": float(best_fine),
         "n_tokens": len(valid_segments),
         "optimization_status": "optimized",
+        "optimizer_version": CURRENT_CEILING_OPTIMIZER_VERSION,
     }
 
 
 def _load_cached_ceilings(output_path: Path, metadata_df: pd.DataFrame) -> pd.DataFrame | None:
     try:
         cached_df = pd.read_csv(output_path)
-        validate_cached_ceiling_columns(cached_df)
+        validate_cached_ceiling_columns(cached_df, CURRENT_CEILING_OPTIMIZER_VERSION)
     except Exception as exc:
         logger.warning("Cached formant ceilings are invalid and will be recomputed: %s", exc)
         return None

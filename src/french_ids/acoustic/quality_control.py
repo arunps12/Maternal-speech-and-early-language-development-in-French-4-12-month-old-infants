@@ -18,7 +18,7 @@ REQUIRED_METADATA_COLUMNS: list[str] = [
     "duration_sec",
 ]
 
-REQUIRED_CEILING_COLUMNS: list[str] = ["speakerid", "vowel", "formant_ceiling"]
+REQUIRED_CEILING_COLUMNS: list[str] = ["speakerid", "vowel", "formant_ceiling", "optimizer_version"]
 
 VALID_ERROR_LABELS: set[str] = {
     "audio_file_missing",
@@ -45,8 +45,13 @@ def validate_required_columns(df: pd.DataFrame, required_columns: Iterable[str])
         raise ValueError(f"Missing required columns: {', '.join(missing)}")
 
 
-def validate_cached_ceiling_columns(df: pd.DataFrame) -> None:
+def validate_cached_ceiling_columns(df: pd.DataFrame, expected_version: int) -> None:
     validate_required_columns(df, REQUIRED_CEILING_COLUMNS)
+    versions = set(df["optimizer_version"].dropna().astype(int).tolist())
+    if versions != {expected_version}:
+        raise ValueError(
+            f"Cached ceiling optimizer version mismatch: expected {expected_version}, found {sorted(versions)}"
+        )
 
 
 def validate_acoustic_config(config: Mapping[str, object], *, base_dir: Path) -> None:
