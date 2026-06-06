@@ -74,6 +74,7 @@ class AcousticFeatureExtractor:
         self.fill_failed_features_with = error_handling.get("fill_failed_features_with", math.nan)
         logging_config = self.config.get("logging", {})
         self.progress_every_n_rows = int(logging_config.get("progress_every_n_rows", 0) or 0)
+        self.error_detail_column = "feature_error_detail"
 
         self.metadata_df: pd.DataFrame | None = None
         self.ceiling_df: pd.DataFrame | None = None
@@ -98,6 +99,8 @@ class AcousticFeatureExtractor:
             df[self.status_column] = ""
         if self.error_column not in df.columns:
             df[self.error_column] = ""
+        if self.error_detail_column not in df.columns:
+            df[self.error_detail_column] = ""
 
         self.metadata_df = df
         logger.info("Loaded %d metadata row(s)", len(df))
@@ -159,13 +162,15 @@ class AcousticFeatureExtractor:
                 self._mark_failed(index, error_label or "unknown_error")
                 continue
 
-            features, formant_error = compute_formant_features(
+            features, formant_error, formant_error_detail = self._normalize_feature_result(
+                compute_formant_features(
                 segment,
                 float(row["formant_ceiling"]),
                 formant_config,
+                )
             )
             if formant_error is not None:
-                self._mark_failed(index, formant_error)
+                self._mark_failed(index, formant_error, formant_error_detail)
                 continue
 
             for column, value in features.items():
@@ -197,9 +202,11 @@ class AcousticFeatureExtractor:
                 self._mark_failed(index, error_label or "unknown_error")
                 continue
 
-            features, pitch_error = compute_pitch_features(segment, pitch_config)
+            features, pitch_error, pitch_error_detail = self._normalize_feature_result(
+                compute_pitch_features(segment, pitch_config)
+            )
             if pitch_error is not None:
-                self._mark_failed(index, pitch_error)
+                self._mark_failed(index, pitch_error, pitch_error_detail)
                 continue
 
             for column, value in features.items():
@@ -207,6 +214,7 @@ class AcousticFeatureExtractor:
 
             df.at[index, self.status_column] = "success"
             df.at[index, self.error_column] = ""
+            df.at[index, self.error_detail_column] = ""
 
         return df
 
@@ -266,7 +274,7 @@ class AcousticFeatureExtractor:
     def _remember_audio_path(self, index: int, audio_path: Path | None) -> None:
         self._audio_paths[index] = "" if audio_path is None else str(audio_path)
 
-    def _mark_failed(self, index: int, error_label: str) -> None:
+    def _mark_failed(self, index: int, error_label: str, error_detail: str | None = None) -> None:
         df = self._require_metadata()
         updates = failure_feature_values(
             ACOUSTIC_COLUMNS,
@@ -277,6 +285,7 @@ class AcousticFeatureExtractor:
         )
         for column, value in updates.items():
             df.at[index, column] = value
+        df.at[index, self.error_detail_column] = error_detail or ""
 
     def _finalize_success_rows(self) -> None:
         df = self._require_metadata()
@@ -285,6 +294,7 @@ class AcousticFeatureExtractor:
                 continue
             df.at[index, self.status_column] = "success"
             df.at[index, self.error_column] = ""
+            df.at[index, self.error_detail_column] = ""
 
     def _build_audit_log(self) -> pd.DataFrame:
         df = self._require_metadata()
@@ -319,6 +329,18 @@ class AcousticFeatureExtractor:
             return
         if row_number % self.progress_every_n_rows == 0 or row_number == total_rows:
             logger.info("%s progress: processed %d/%d row(s)", phase.capitalize(), row_number, total_rows)
+
+    @staticmethod
+    def _normalize_feature_result(result: object) -> tuple[dict[str, float], str | None, str | None]:
+        if not isinstance(result, tuple):
+            raise TypeError(f"Unexpected feature result type: {type(result)!r}")
+        if len(result) == 2:
+            features, error_label = result
+            return features, error_label, None
+        if len(result) == 3:
+            features, error_label, error_detail = result
+            return features, error_label, error_detail
+        raise ValueError(f"Unexpected feature result length: {len(result)}")
 
 
 def extract_pitch(sound: object, start: float, end: float, config: dict[str, Any]) -> dict[str, float]:

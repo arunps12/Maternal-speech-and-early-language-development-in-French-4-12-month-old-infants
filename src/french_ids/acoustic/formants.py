@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 from typing import Iterable, Mapping
 
@@ -9,11 +10,14 @@ except ImportError:  # pragma: no cover
     parselmouth = None  # type: ignore
 
 
+logger = logging.getLogger(__name__)
+
+
 def compute_formant_features(
     segment: object,
     ceiling_hz: float,
     config: Mapping[str, object],
-) -> tuple[dict[str, float], str | None]:
+) -> tuple[dict[str, float], str | None, str | None]:
     if parselmouth is None:
         raise RuntimeError("praat-parselmouth is required for acoustic extraction")
 
@@ -25,8 +29,10 @@ def compute_formant_features(
             window_length=float(config.get("window_length", 0.025)),
             pre_emphasis_from=float(config.get("pre_emphasis_from_hz", 50.0)),
         )
-    except Exception:
-        return _empty_formant_values(ceiling_hz), "parselmouth_error"
+    except Exception as exc:
+        error_detail = f"{type(exc).__name__}: {exc}"
+        logger.warning("Parselmouth formant extraction failed: %s", error_detail)
+        return _empty_formant_values(ceiling_hz), "parselmouth_error", error_detail
 
     duration = _get_duration(segment)
     sample_times = _sample_times(duration, float(config.get("time_step", 0.0025)))
@@ -51,8 +57,8 @@ def compute_formant_features(
             features[f"central_F{formant_number}"] = math.nan
 
     if not valid_any:
-        return _empty_formant_values(ceiling_hz), "formant_extraction_failed"
-    return features, None
+        return _empty_formant_values(ceiling_hz), "formant_extraction_failed", None
+    return features, None, None
 
 
 def candidate_f1_f2_values(

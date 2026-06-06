@@ -15,6 +15,7 @@ AUDIT_LOG_COLUMNS: list[str] = [
     "duration_sec",
     "feature_status",
     "feature_error",
+    "feature_error_detail",
     "formant_ceiling",
 ]
 
@@ -48,14 +49,37 @@ def failure_feature_values(
 
 
 def build_audio_stem(row: Mapping[str, object]) -> str:
+    time_value = _normalize_time_token(row.get("time"))
     return "_".join(
         [
             str(row["speakerid"]),
             str(row["session"]),
             str(row["activity"]),
-            str(row["time"]),
+            time_value,
         ]
     )
+
+
+def _normalize_time_token(value: object) -> str:
+    if value is None:
+        return ""
+
+    text = str(value).strip()
+    if not text:
+        return ""
+
+    try:
+        numeric_value = float(text)
+    except (TypeError, ValueError):
+        return text
+
+    if not math.isfinite(numeric_value):
+        return text
+
+    integer_value = int(numeric_value)
+    if numeric_value == integer_value:
+        return f"{integer_value:04d}"
+    return text
 
 
 def build_audit_log_row(
@@ -75,6 +99,7 @@ def build_audit_log_row(
         "duration_sec": row.get("duration_sec", math.nan),
         "feature_status": row.get(status_column, ""),
         "feature_error": row.get(error_column, ""),
+        "feature_error_detail": row.get("feature_error_detail", ""),
         "formant_ceiling": row.get("formant_ceiling", math.nan),
     }
 

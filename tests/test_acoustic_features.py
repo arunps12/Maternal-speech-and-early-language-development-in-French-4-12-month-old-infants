@@ -8,6 +8,8 @@ import pytest
 
 from french_ids.acoustic import ceilings
 from french_ids.acoustic import formants as formant_helpers
+from french_ids.acoustic import pitch as pitch_helpers
+from french_ids.acoustic.utils import build_audio_stem
 from french_ids.config import load_config
 from french_ids.praat_features import ACOUSTIC_COLUMNS, AcousticFeatureExtractor
 
@@ -167,6 +169,18 @@ def test_acoustic_output_columns_are_created(tmp_path: Path):
         assert column in df.columns
     assert "feature_status" in df.columns
     assert "feature_error" in df.columns
+    assert "feature_error_detail" in df.columns
+
+
+def test_build_audio_stem_zero_pads_numeric_time_tokens():
+    row = {
+        "speakerid": "c009",
+        "session": "12m",
+        "activity": "meal",
+        "time": 815,
+    }
+
+    assert build_audio_stem(row) == "c009_12m_meal_0815"
 
 
 def test_missing_audio_file_does_not_crash_pipeline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -491,6 +505,67 @@ def test_formant_value_lookup_uses_supported_parselmouth_signature():
     assert fake_formant.calls == [(2, 0.05)]
 
 
+def test_compute_pitch_features_uses_none_for_zero_time_step(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(pitch_helpers, "parselmouth", object())
+
+    class FakePitch:
+        selected_array = {"frequency": [200.0, 220.0, 240.0]}
+
+    class FakeSegment:
+        def to_pitch(self, *, time_step, pitch_floor, pitch_ceiling):
+            assert time_step is None
+            assert pitch_floor == 100.0
+            assert pitch_ceiling == 600.0
+            return FakePitch()
+
+    features, error_label, error_detail = pitch_helpers.compute_pitch_features(
+        FakeSegment(),
+        {"time_step": 0.0, "pitch_floor_hz": 100.0, "pitch_ceiling_hz": 600.0},
+    )
+
+    assert error_label is None
+    assert error_detail is None
+    assert features["mean_pitch"] == 220.0
+
+
+def test_audit_log_includes_error_detail(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    config = _base_config(tmp_path)
+    _write_metadata(tmp_path, config)
+
+    monkeypatch.setattr(
+        "french_ids.praat_features.estimate_formant_ceilings",
+        lambda metadata_df, audio_repository, config, output_path, recompute=False: pd.DataFrame(
+            [{"speakerid": "M01", "vowel": "a", "formant_ceiling": 5500.0, "n_tokens": 1, "optimization_status": "fallback_too_few_tokens"}]
+        ),
+    )
+
+    extractor = AcousticFeatureExtractor(config)
+    monkeypatch.setattr(
+        extractor.audio_repository,
+        "get_segment_for_row",
+        lambda row: (object(), tmp_path / "M01.wav", None),
+    )
+    monkeypatch.setattr(
+        "french_ids.praat_features.compute_formant_features",
+        lambda segment, ceiling_hz, config: (_success_formants(ceiling_hz), None, None),
+    )
+    monkeypatch.setattr(
+        "french_ids.praat_features.compute_pitch_features",
+        lambda segment, config: (
+            {"mean_pitch": float("nan"), "min_pitch": float("nan"), "max_pitch": float("nan"), "pitch_range": float("nan")},
+            "parselmouth_error",
+            "TypeError: to_pitch(): incompatible function arguments",
+        ),
+    )
+
+    extractor.compute_all_features()
+    extractor.save_outputs()
+
+    log_df = pd.read_csv(config["paths"]["log_file"])
+    assert log_df.loc[0, "feature_error"] == "parselmouth_error"
+    assert "TypeError: to_pitch()" in log_df.loc[0, "feature_error_detail"]
+
+
 def test_save_outputs_writes_audit_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     config = _base_config(tmp_path)
     _write_metadata(tmp_path, config)
@@ -530,6 +605,7 @@ def test_save_outputs_writes_audit_log(tmp_path: Path, monkeypatch: pytest.Monke
         "duration_sec",
         "feature_status",
         "feature_error",
+        "feature_error_detail",
         "formant_ceiling",
     ]
     assert log_df.loc[0, "feature_status"] == "success"
